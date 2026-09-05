@@ -24,12 +24,13 @@ app/
   core/          Settings, logging, security (hashing/JWT), exception → HTTP mapping
   api/           deps.py (auth/RBAC guards) + v1/ routers — thin, delegate to services/
   db/            Engine/session + declarative base
-  models/        SQLAlchemy models — user.py (Phase 3); more land with each phase's data
+  models/        SQLAlchemy models: user.py (Phase 3); student_profile.py, skill.py,
+                 student_skill.py, project.py, experience.py, certification.py (Phase 4)
   schemas/       Pydantic request/response models
   services/      Business logic — routers never hash a password or query the DB directly
   repositories/  Query objects — the only layer that writes SQLAlchemy queries
   ai/            AIProvider interface + implementations (added Phase 5)
-migrations/      Alembic — versions/0001_create_users_table.py is the first migration
+migrations/      Alembic — 0001 (users), 0002 (profile/skills/projects/experiences/certifications)
 seed/            Seed/demo data loaders (added Phase 6+)
 tests/           pytest — conftest.py's `client` fixture runs against a disposable in-memory
                  SQLite DB (models use dialect-generic types for exactly this reason), so the
@@ -37,6 +38,19 @@ tests/           pytest — conftest.py's `client` fixture runs against a dispos
 ```
 
 `ai/` and `seed/` are intentionally still empty — they fill in starting Phase 5 and Phase 6.
+
+## Profile model (Phase 4)
+
+- `student_profiles` is one-to-one with `users`, created lazily on first `GET`/`PUT /profile`
+  (not at registration) — auth and profile stay decoupled modules.
+- `skills` is a shared catalogue, not per-student free text: adding a skill via
+  `POST /profile/skills` resolves an existing catalogue row by case-insensitive name match
+  before creating a new one, so "React" and "react" never become two rows.
+- `projects` can tag the skills they used (`project_skills`); `PUT /profile/projects/{id}`
+  replaces the tag set rather than diffing it — simple and correct at this scale.
+- Every mutation on a sub-resource (skill/project/experience/certification) is scoped to the
+  authenticated user's own profile; a request naming another student's resource id gets a 404,
+  never a 403 — see `services/profile_service.py`'s module docstring for why.
 
 ## Auth model (Phase 3)
 

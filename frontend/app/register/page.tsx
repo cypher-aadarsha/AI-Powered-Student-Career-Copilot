@@ -30,7 +30,7 @@ export default function RegisterPage() {
       // Registration doesn't return a session — log the new account in
       // immediately so the flow feels like one step, not two.
       await login({ email: input.email, password: input.password });
-      router.push("/me");
+      router.push("/profile");
     } catch (err) {
       setServerError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
     }

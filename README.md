@@ -8,9 +8,10 @@ BSc. CSIT 6th Semester Software Engineering project — built as a production-qu
 monolith rather than a toy CRUD demo. The full architecture, database design, algorithms, and
 phased delivery plan are documented in the **Technical Design Document** (Phase 1 deliverable).
 
-**Status:** Phase 3 — Database & Authentication. Registration, login, JWT sessions, and
-role-based access control work end-to-end. The student profile and every other feature module
-land in the phases that follow.
+**Status:** Phase 4 — Student Profile. On top of auth (Phase 3), a student can now maintain a
+full profile: academic info, skills (a shared, normalized catalogue), projects (taggable with
+skills used), work/internship experience, and certifications — real relational tables with
+full CRUD, not a JSON blob. Every other feature module lands in the phases that follow.
 
 ## Stack
 
@@ -55,8 +56,8 @@ The backend container runs `alembic upgrade head` on boot, so the database schem
 current — no manual migration step needed under Docker.
 
 Then open:
-- **Frontend:** http://localhost:3000 — register an account, log in, and land on the Phase 3
-  placeholder protected page at `/me`.
+- **Frontend:** http://localhost:3000 — register an account, log in, and land on `/profile` to
+  fill in your academic info, skills, projects, experience, and certifications.
 - **Backend API docs (OpenAPI/Swagger):** http://localhost:8000/docs
 - **Health check:** http://localhost:8000/api/v1/health
 
@@ -90,8 +91,10 @@ npm run dev
 ## Testing
 
 ```bash
-# Backend — 15 tests: health, password hashing, registration, login, JWT-gated
-# routes, and RBAC. Runs against a disposable in-memory SQLite DB, no Postgres needed.
+# Backend — 31 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
+# and the profile module (core fields, skills with case-insensitive dedup, projects with
+# skill tagging, experiences, certifications, cross-user ownership checks). Runs against a
+# disposable in-memory SQLite DB, no Postgres needed.
 cd backend && pytest -v
 
 # Frontend build + lint
@@ -116,8 +119,8 @@ version-controlled.
 
 1. ✅ Requirements & architecture (Technical Design Document)
 2. ✅ Project initialization
-3. ✅ Database & authentication — **this phase**
-4. ⬜ Student profile
+3. ✅ Database & authentication
+4. ✅ Student profile — **this phase**
 5. ⬜ Resume system (upload, parsing, AI analysis)
 6. ⬜ Career & skill system (skill-gap analysis, career recommendations)
 7. ⬜ Learning resources & job matching

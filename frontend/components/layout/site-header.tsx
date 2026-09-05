@@ -17,7 +17,7 @@ export function SiteHeader() {
       <nav className="flex items-center gap-4 text-sm">
         {isLoading ? null : user ? (
           <>
-            <Link href="/me" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50">
+            <Link href="/profile" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50">
               {user.full_name}
             </Link>
             <button

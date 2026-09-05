@@ -20,11 +20,15 @@ Changing it requires `docker compose build frontend`.
 ## Structure
 
 ```
-app/          Routes (App Router) — login/, register/, me/ (Phase 3); more per phase
+app/          Routes (App Router) — login/, register/ (Phase 3), profile/ (Phase 4)
 components/
-  ui/          Small presentational primitives (button, text-field)
-  layout/      Page shells (site-header, auth-shell)
-features/      One folder per product module — auth/ (schemas + AuthProvider context) so far
+  ui/          Small presentational primitives (button, text-field, textarea-field,
+               select-field, inline-confirm-button)
+  layout/      Page shells (site-header, auth-shell, section-card)
+features/
+  auth/        Zod schemas + AuthProvider context
+  profile/     Zod schemas, api.ts (backend calls), use-profile.ts, and one component per
+               profile section (skills/projects/experiences/certifications)
 hooks/         Shared React hooks — use-require-auth.ts guards a page client-side
 lib/           Cross-cutting utilities — api-client.ts wraps every backend call and attaches
                the auth header; auth-token.ts is the only place that touches localStorage
@@ -40,3 +44,14 @@ page, but the actual enforcement is the backend validating the JWT on every requ
 proxy.ts` (server-side route guard) isn't used because it can't read `localStorage`; see the
 Technical Design Document §18 for the accepted trade-off and what a cookie-based BFF alternative
 would look like.
+
+## Profile page (Phase 4)
+
+`/profile` composes five sections (core fields, skills, projects, experiences,
+certifications), each with its own add/edit form and a two-step inline delete
+(`InlineConfirmButton`) instead of a blocking `window.confirm()`. There's no cache/query
+library yet — `features/profile/use-profile.ts` fetches on mount and every section's `onChange`
+just refetches the whole profile; simple and fast enough at this data size. RHF + Zod forms use
+the library's `useForm<Input, unknown, Output>` three-generic pattern wherever a schema coerces
+or defaults a value (e.g. `semester` string → number), since the form's pre-submit shape and the
+resolver's post-validation shape genuinely differ.
