@@ -3,6 +3,7 @@
  * error normalization and the base-URL split (browser vs. server-side,
  * see below) live in exactly one place.
  */
+import { authHeader } from "./auth-token";
 
 // Server components/route handlers run inside the Docker network and must
 // reach the backend by its service name; the browser reaches it via the
@@ -24,12 +25,20 @@ export class ApiError extends Error {
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${getApiBaseUrl()}${path}`;
-  const response = await fetch(url, { ...init, cache: "no-store" });
+  const response = await fetch(url, {
+    ...init,
+    cache: "no-store",
+    headers: { ...authHeader(), ...init?.headers },
+  });
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     const message = body?.error?.message ?? `Request to ${path} failed with status ${response.status}`;
     throw new ApiError(response.status, message);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   const body = await response.json();

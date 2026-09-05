@@ -8,18 +8,19 @@ BSc. CSIT 6th Semester Software Engineering project — built as a production-qu
 monolith rather than a toy CRUD demo. The full architecture, database design, algorithms, and
 phased delivery plan are documented in the **Technical Design Document** (Phase 1 deliverable).
 
-**Status:** Phase 2 — Project Initialization. Auth, the domain models, and every feature module
+**Status:** Phase 3 — Database & Authentication. Registration, login, JWT sessions, and
+role-based access control work end-to-end. The student profile and every other feature module
 land in the phases that follow.
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, React Hook Form + Zod |
 | Backend | FastAPI, Pydantic v2, SQLAlchemy 2.0 |
-| Database | PostgreSQL 16 (Alembic migrations, added Phase 3) |
+| Database | PostgreSQL 16, Alembic migrations |
 | AI/NLP | spaCy, sentence-transformers, PyMuPDF/pdfplumber, python-docx (added Phase 5) |
-| Auth | JWT (python-jose) + bcrypt (passlib) (added Phase 3) |
+| Auth | JWT (python-jose) + bcrypt (passlib) |
 | DevOps | Docker, Docker Compose, pytest, Jest |
 
 ## Project structure
@@ -50,13 +51,20 @@ cp frontend/.env.example frontend/.env.local
 docker compose up --build
 ```
 
+The backend container runs `alembic upgrade head` on boot, so the database schema is always
+current — no manual migration step needed under Docker.
+
 Then open:
-- **Frontend:** http://localhost:3000 — shows a scaffold status page confirming
-  frontend → API → database connectivity end-to-end.
+- **Frontend:** http://localhost:3000 — register an account, log in, and land on the Phase 3
+  placeholder protected page at `/me`.
 - **Backend API docs (OpenAPI/Swagger):** http://localhost:8000/docs
 - **Health check:** http://localhost:8000/api/v1/health
 
 Stop with `Ctrl+C`, then `docker compose down` (add `-v` to also drop the Postgres volume).
+
+Changed `frontend/`'s code and only see the old behavior? `NEXT_PUBLIC_API_URL` and any other
+`NEXT_PUBLIC_*` variable are baked into the client bundle at *build* time — rerun
+`docker compose build frontend` (or `up --build`) rather than just restarting the container.
 
 ## Running without Docker
 
@@ -67,6 +75,7 @@ python -m venv .venv
 .venv/Scripts/activate        # Windows;  source .venv/bin/activate on macOS/Linux
 pip install -r requirements.txt
 cp .env.example .env           # then point DATABASE_URL at your local Postgres
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
@@ -81,11 +90,12 @@ npm run dev
 ## Testing
 
 ```bash
-# Backend
+# Backend — 15 tests: health, password hashing, registration, login, JWT-gated
+# routes, and RBAC. Runs against a disposable in-memory SQLite DB, no Postgres needed.
 cd backend && pytest -v
 
-# Frontend build check
-cd frontend && npm run build
+# Frontend build + lint
+cd frontend && npm run build && npm run lint
 ```
 
 ## Environment variables
@@ -105,8 +115,8 @@ version-controlled.
 ## Development phases
 
 1. ✅ Requirements & architecture (Technical Design Document)
-2. ✅ Project initialization — **this phase**
-3. ⬜ Database & authentication
+2. ✅ Project initialization
+3. ✅ Database & authentication — **this phase**
 4. ⬜ Student profile
 5. ⬜ Resume system (upload, parsing, AI analysis)
 6. ⬜ Career & skill system (skill-gap analysis, career recommendations)

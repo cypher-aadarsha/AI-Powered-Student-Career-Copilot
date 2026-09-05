@@ -15,5 +15,6 @@ COPY . .
 EXPOSE 8000
 
 # --reload matches docker-compose.yml's bind-mounted ./backend, which is a
-# local-dev convenience. A production compose file would drop both.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# local-dev convenience. A production compose file would drop both, and
+# would run migrations as a separate release step rather than on every boot.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]

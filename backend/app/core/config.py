@@ -5,7 +5,7 @@ Never hardcode secrets here. `.env` (gitignored) supplies local values;
 """
 from functools import lru_cache
 
-from pydantic import AnyHttpUrl, Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,7 +34,14 @@ class Settings(BaseSettings):
     # --- AI provider (wired starting Phase 5) ---
     ai_provider: str = Field(default="mock", description="'mock' or 'llm' — see ai/provider.py")
     llm_api_key: str | None = None
-    llm_api_base_url: AnyHttpUrl | None = None
+    llm_api_base_url: str | None = None
+
+    @field_validator("llm_api_key", "llm_api_base_url", mode="before")
+    @classmethod
+    def _blank_env_value_means_unset(cls, value: str | None) -> str | None:
+        # An .env line like `LLM_API_KEY=` sets the env var to "", which is
+        # a present-but-empty override — treat it the same as unset.
+        return value or None
 
 
 @lru_cache

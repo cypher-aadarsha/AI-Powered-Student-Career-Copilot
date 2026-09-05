@@ -35,10 +35,15 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        # Inlined into the client bundle at build time (see Dockerfile) —
+        # this is what the *browser on the host* uses, so it must match
+        # backend's published host port below, not the in-network service name.
+        NEXT_PUBLIC_API_URL: http://localhost:8000
     restart: unless-stopped
-    env_file:
-      - ./frontend/.env.local
     environment:
+      # Read at runtime by server components only (e.g. the Phase 2 status
+      # page) — reaches the backend over the Docker network, not the host.
       API_INTERNAL_URL: http://backend:8000
     ports:
       - "3000:3000"

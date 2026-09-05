@@ -1,0 +1,45 @@
+"""Shared fixtures. Auth/RBAC tests run against a disposable in-memory
+SQLite database rather than requiring a live Postgres — the models use
+dialect-generic SQLAlchemy types (Uuid, Enum) specifically so this works
+(TDD §20: AI/DB tests must not depend on infrastructure that may not be
+running in CI or on a contributor's machine).
+"""
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+import app.models  # noqa: F401 — registers models on Base.metadata
+from app.db.base import Base
+from app.db.session import get_db
+from app.main import app as fastapi_app
+
+
+@pytest.fixture()
+def db_session():
+    engine = create_engine(
+        "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+    session = TestingSessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+@pytest.fixture()
+def client(db_session: Session):
+    from fastapi.testclient import TestClient
+
+    def override_get_db():
+        yield db_session
+
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    with TestClient(fastapi_app) as test_client:
+        yield test_client
+    fastapi_app.dependency_overrides.clear()

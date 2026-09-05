@@ -9,6 +9,11 @@ FROM node:22-slim AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# NEXT_PUBLIC_* variables are inlined into the client bundle at build time,
+# not read at container start — so this must arrive as a build ARG (wired
+# from docker-compose.yml's build.args), not a runtime `environment:` entry.
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN npm run build
 
 # --- run ---
