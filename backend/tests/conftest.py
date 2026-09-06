@@ -5,7 +5,7 @@ dialect-generic SQLAlchemy types (Uuid, Enum) specifically so this works
 running in CI or on a contributor's machine).
 """
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -20,6 +20,17 @@ def db_session():
     engine = create_engine(
         "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
+
+    # SQLite ignores FOREIGN KEY constraints (including ON DELETE
+    # RESTRICT/CASCADE/SET NULL) unless explicitly told to enforce them per
+    # connection — unlike Postgres, which always enforces them. Without this,
+    # tests would silently pass through deletes a real database would reject.
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, _):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     Base.metadata.create_all(engine)
     TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 

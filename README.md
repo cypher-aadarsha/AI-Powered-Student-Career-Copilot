@@ -8,11 +8,11 @@ BSc. CSIT 6th Semester Software Engineering project — built as a production-qu
 monolith rather than a toy CRUD demo. The full architecture, database design, algorithms, and
 phased delivery plan are documented in the **Technical Design Document** (Phase 1 deliverable).
 
-**Status:** Phase 9 — Career Dashboard. `/` is now the real product home (replacing the Phase 2
-scaffold page) — a single view aggregating everything earlier phases built: profile completion,
-latest resume score, top career and job matches, mock-interview stats, and a prioritized list of
-next steps, each linking straight to the page that addresses it. Every other feature module lands
-in the phases that follow.
+**Status:** Phase 10 — Admin Panel. The four platform-curated catalogues every earlier phase
+deliberately left read-only (career roles, learning resources, job postings, interview questions)
+now have full admin CRUD at `/admin`, plus user moderation (deactivate/reactivate an account).
+Admin accounts are provisioned out-of-band via a seed script, never through self-registration.
+Every other feature module lands in the phases that follow.
 
 ## Stack
 
@@ -66,11 +66,18 @@ docker compose exec backend python -m seed.job_postings
 docker compose exec backend python -m seed.interview_questions
 ```
 
+Admin accounts are provisioned the same way — out-of-band, never through self-registration:
+
+```bash
+docker compose exec -e ADMIN_PASSWORD=change-me backend python -m seed.create_admin
+```
+
 Then open:
 - **Frontend:** http://localhost:3000 — register an account, log in, and land on your dashboard
   at `/`. From there: fill in your profile at `/profile`, upload a resume for parsing + AI
   analysis at `/resume`, see your ranked career matches at `/careers`, browse `/learning`
-  resources, check `/jobs` for skill-matched demo postings, and practice at `/interviews`.
+  resources, check `/jobs` for skill-matched demo postings, and practice at `/interviews`. Log in
+  with a seeded admin account to manage the catalogues and moderate users at `/admin`.
 - **Backend API docs (OpenAPI/Swagger):** http://localhost:8000/docs
 - **Health check:** http://localhost:8000/api/v1/health
 
@@ -94,6 +101,7 @@ python -m seed.career_roles        # one-time: career-role catalogue (Phase 6)
 python -m seed.learning_resources  # one-time: learning-resource catalogue (Phase 7)
 python -m seed.job_postings        # one-time: demo job postings (Phase 7)
 python -m seed.interview_questions # one-time: interview question bank (Phase 8)
+ADMIN_PASSWORD=change-me python -m seed.create_admin  # one-time: your admin login (Phase 10)
 uvicorn app.main:app --reload
 ```
 
@@ -108,7 +116,7 @@ npm run dev
 ## Testing
 
 ```bash
-# Backend — 97 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
+# Backend — 114 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
 # the profile module (core fields, skills with case-insensitive dedup, projects with skill
 # tagging, experiences, certifications, cross-user ownership checks), the resume module
 # (PDF/DOCX upload + parsing, contact-info/skill extraction, the heuristic AI analyzer,
@@ -117,9 +125,12 @@ npm run dev
 # learning/job modules (resource browsing + skill filter, the role learning-plan endpoint,
 # job-posting ranking reusing the same skill-gap engine), the interview module (role-aware
 # question selection, one-answer-per-question, auto-completion, the heuristic feedback
-# provider's scoring rules), and the dashboard module (profile-completion scoring, latest
-# resume, top matches, interview stats, the suggested-actions rules). Runs against a
-# disposable in-memory SQLite DB, no Postgres needed.
+# provider's scoring rules), the dashboard module (profile-completion scoring, latest
+# resume, top matches, interview stats, the suggested-actions rules), and the admin module
+# (role-guard enforcement, CRUD over all four catalogues, user moderation including the
+# can't-deactivate-yourself guard, and the delete-blocked-when-in-use conflict path — which
+# is also why the test DB now runs with SQLite's FOREIGN KEY enforcement turned on, see
+# tests/conftest.py). Runs against a disposable in-memory SQLite DB, no Postgres needed.
 cd backend && pytest -v
 
 # Frontend build + lint
@@ -150,7 +161,7 @@ version-controlled.
 6. ✅ Career & skill system (skill-gap analysis, career recommendations)
 7. ✅ Learning resources & job matching
 8. ✅ Interview preparation & mock interviews
-9. ✅ Career dashboard — **this phase**
-10. ⬜ Admin panel
+9. ✅ Career dashboard
+10. ✅ Admin panel — **this phase**
 11. ⬜ Testing & security hardening
 12. ⬜ Deployment

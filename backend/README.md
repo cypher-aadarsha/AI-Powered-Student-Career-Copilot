@@ -14,6 +14,7 @@ python -m seed.career_roles             # one-time: career-role catalogue (Phase
 python -m seed.learning_resources       # one-time: learning-resource catalogue (Phase 7)
 python -m seed.job_postings             # one-time: demo job postings (Phase 7)
 python -m seed.interview_questions      # one-time: interview question bank (Phase 8)
+ADMIN_PASSWORD=... python -m seed.create_admin  # one-time: your admin login (Phase 10)
 uvicorn app.main:app --reload           # http://localhost:8000 — docs at /docs
 pytest -v
 ```
@@ -32,12 +33,15 @@ app/
                  student_skill.py, project.py, experience.py, certification.py (Phase 4);
                  resume.py (Phase 5); career_role.py (Phase 6); learning_resource.py,
                  job_posting.py (Phase 7); interview_question.py, mock_interview.py (Phase 8).
-                 No new tables in Phase 9 — the dashboard is read-only composition.
+                 No new tables in Phase 9 or 10 — the dashboard is read-only composition and
+                 the admin panel manages rows in tables that already existed.
   schemas/       Pydantic request/response models. skill_match.py's MatchedSkill is shared
                  between career.py and job.py — both run their skills through the same
                  skill_gap engine and return the same "skill + proficiency" shape.
                  dashboard.py reuses CareerListItem/JobListItem as-is for the "top matches"
-                 cards rather than defining a second shape for the same data
+                 cards rather than defining a second shape for the same data. admin.py
+                 (Phase 10) takes skills by name (AdminSkillRef), not id, on every write
+                 request — see its docstring for why
   services/      Business logic — routers never hash a password or query the DB directly.
                  skill_gap.py (Phase 6) is a pure, DB-free scoring function, deliberately kept
                  separate from career_service.py/job_service.py (which load the data it scores).
@@ -47,8 +51,14 @@ app/
                  start time and scores each answer through app/ai/interview_provider.py.
                  dashboard_service.py (Phase 9) composes ProfileRepository/CareerService/
                  JobService/MockInterviewSessionRepository — it computes nothing those modules
-                 don't already compute, except profile-completion scoring and suggested actions
-  repositories/  Query objects — the only layer that writes SQLAlchemy queries
+                 don't already compute, except profile-completion scoring and suggested actions.
+                 admin_service.py (Phase 10) composes all four catalogue repositories plus
+                 UserRepository — one service for the whole admin surface, the same shape as
+                 LearningService composing CareerService
+  repositories/  Query objects — the only layer that writes SQLAlchemy queries. Every
+                 repository that was read-only through Phase 9 (career_role, learning_resource,
+                 job_posting, interview_question) gained create/update/delete/set_skills methods
+                 in Phase 10 — admin_service.py is their only caller
   ai/            Resume text extraction (parsing.py), structured-data extraction
                  (extraction.py), and the AIProvider interface + implementations
                  (provider.py) — Phase 5. interview_provider.py (Phase 8) is the same
@@ -58,14 +68,57 @@ app/
 migrations/      Alembic — 0001 (users), 0002 (profile/skills/projects/experiences/certifications),
                  0003 (resumes), 0004 (career roles), 0005 (learning resources + job postings),
                  0006 (interview questions + mock interview sessions/answers). Nothing added
-                 in Phase 9 — no new tables.
+                 in Phase 9 or 10 — no new tables either phase.
 seed/            career_roles.py (Phase 6), learning_resources.py + job_postings.py (Phase 7),
-                 interview_questions.py (Phase 8) — all idempotent by title (job postings:
-                 title+company); see below
+                 interview_questions.py (Phase 8), create_admin.py (Phase 10, the only one that
+                 isn't a catalogue — provisions the first admin login) — all idempotent
+                 (catalogues by title, job postings by title+company, the admin script by
+                 email); see below
 tests/           pytest — conftest.py's `client` fixture runs against a disposable in-memory
                  SQLite DB (models use dialect-generic types for exactly this reason), so the
-                 suite needs no live Postgres
+                 suite needs no live Postgres. Since Phase 10, that DB also runs with SQLite's
+                 FOREIGN KEY enforcement turned on (off by default, unlike Postgres) — see
+                 conftest.py's `_enable_sqlite_foreign_keys` and the admin module notes below
 ```
+
+## Admin panel (Phase 10)
+
+- Every route under `/admin` is guarded once, at the router level
+  (`app/api/v1/admin/__init__.py`'s `dependencies=[Depends(require_role(UserRole.admin))]`) —
+  individual sub-routers (`users.py`, `career_roles.py`, `learning_resources.py`,
+  `job_postings.py`, `interview_questions.py`) never repeat the guard. This is the
+  `admin.py` placeholder from Phase 3 turning into the package its own docstring predicted
+  it eventually would.
+- **Admin accounts are never created by self-registration** (`AuthService.register` always
+  creates a `student`) — the only way in is `seed/create_admin.py`
+  (`ADMIN_PASSWORD=... python -m seed.create_admin`), idempotent by email, reading the
+  password from an environment variable so it never lives in source control. Its default
+  email is deliberately a real-looking domain (`careercopilot.io`), not `.local`/`.test`/
+  `.example` — those are IANA special-use TLDs that `EmailStr` (the same schema `/auth/login`
+  validates against) rejects outright, which would silently create an admin account nobody
+  could actually log into. `tests/test_admin.py` has a regression test for exactly this.
+- **User moderation** is `GET /admin/users` + `PATCH /admin/users/{id}` (`{"is_active": bool}`).
+  Deactivating blocks login immediately (`AuthService.authenticate` already checked
+  `is_active`, from Phase 3) without touching any of that user's data. An admin can't
+  deactivate their own account (`400 cannot_deactivate_self`) — a guardrail against locking
+  yourself out with no other admin to undo it.
+- **Catalogue CRUD**: `career-roles`, `learning-resources`, `job-postings`, and
+  `interview-questions` each get `GET` (list), `POST`, `PUT /{id}`, `DELETE /{id}`. Every
+  write request gives skills by **name + category** (`AdminSkillRef`), the same shape the
+  student-facing "add skill" form already uses, resolved via `SkillRepository.get_or_create`
+  — an admin can introduce a brand-new skill while creating a role/job/resource/question in
+  one step, instead of needing a separate "manage skills" screen first.
+- `career_roles.title` has a real DB unique constraint, so creating/renaming to a duplicate
+  title is caught and returned as `409 conflict` rather than a raw `IntegrityError`.
+- Deleting an `interview_question` is the one delete in this app that can legitimately
+  conflict: `mock_interview_session_questions`/`mock_interview_answers` reference it with
+  `ondelete="RESTRICT"` once a student has actually used it in a session. `AdminService.
+  delete_interview_question` flushes immediately (rather than leaving it to the route's later
+  commit) specifically to catch that and translate it into a clean `409`, not a `500`. The
+  other three catalogues have no such reference and can't hit this.
+- `learning-resources` read responses reuse `LearningResourcePublic` from `schemas/learning.py`
+  as-is — the shape an admin needs is identical to what students already see, so a second copy
+  of the same schema would only drift out of sync over time.
 
 ## Dashboard module (Phase 9)
 
@@ -134,9 +187,9 @@ tests/           pytest — conftest.py's `client` fixture runs against a dispos
 ## Career model (Phase 6)
 
 - `career_roles` + `career_role_skills` are a **platform-curated catalogue**, not
-  student-authored — there's no `POST /careers`. They're populated by `seed/career_roles.py`
-  (`python -m seed.career_roles`, idempotent by title), and full admin CRUD for them is
-  Phase 10's job.
+  student-authored — there's no student-facing `POST /careers`. They're populated by
+  `seed/career_roles.py` (`python -m seed.career_roles`, idempotent by title) and, since
+  Phase 10, manageable directly by an admin at `/admin/career-roles` (see that section above).
 - The skill-gap score (`app/services/skill_gap.py`) is a deterministic weighted formula, the
   same explainability philosophy as the resume analyzer's `MockAIProvider`: every required
   skill counts double a preferred one, and a matched skill earns partial credit from the
@@ -199,6 +252,7 @@ tests/           pytest — conftest.py's `client` fixture runs against a dispos
   invalidate anything server-side yet — see the Technical Design Document's risk register for
   the accepted trade-off.
 - Roles: `student` (default, the only self-registerable role) and `admin` (provisioned
-  out-of-band — never chosen by the registering user). `api/deps.py`'s `require_role(...)`
-  guards any admin-only route; `GET /api/v1/admin/ping` is a placeholder proving the guard until
-  Phase 10 builds the real admin CRUD surfaces.
+  out-of-band via `seed/create_admin.py` — never chosen by the registering user). `api/deps.py`'s
+  `require_role(...)` guards every route under `/admin` (see the Admin panel section above for
+  the full Phase 10 surface); `GET /api/v1/admin/ping` remains as a minimal smoke test of the
+  guard itself, separate from any real resource.

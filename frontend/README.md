@@ -23,7 +23,8 @@ Changing it requires `docker compose build frontend`.
 app/          Routes (App Router) — page.tsx is the dashboard (Phase 9, protected — see below);
                login/, register/ (Phase 3), profile/ (Phase 4), resume/ (Phase 5),
                careers/ + careers/[id]/ (Phase 6), jobs/ + jobs/[id]/, learning/ (Phase 7),
-               interviews/ + interviews/[id]/ (Phase 8)
+               interviews/ + interviews/[id]/ (Phase 8), admin/ + four admin/<catalogue>/
+               sub-pages + admin/users/ (Phase 10, protected by role — see below)
 components/
   ui/          Small presentational primitives (button, text-field, textarea-field,
                select-field, inline-confirm-button, score-bar — shared by resume, careers,
@@ -43,7 +44,11 @@ features/
   interview/   api.ts, use-interview-sessions.ts — the list page's data layer; the session
                detail page fetches (and re-fetches after each answer) inline
   dashboard/   api.ts, use-dashboard.ts — one endpoint, one hook, powers the whole home page
-hooks/         Shared React hooks — use-require-auth.ts guards a page client-side
+  admin/       api.ts (every /admin/* call) and skill-ref-input.tsx — the one component
+               shared by all four admin CRUD pages, since every catalogue tags itself with
+               the same (skill name, category) list shape
+hooks/         Shared React hooks — use-require-auth.ts guards a page client-side;
+               use-require-admin.ts (Phase 10) additionally bounces a non-admin to `/`
 lib/           Cross-cutting utilities — api-client.ts wraps every backend call and attaches
                the auth header; auth-token.ts is the only place that touches localStorage
 types/         Shared TypeScript types for API response shapes
@@ -132,3 +137,28 @@ top-3 career/job match cards. `suggestionHref()` routes each suggestion string t
 addresses it via a plain substring match (`"resume"` → `/resume`, `"mock interview"` →
 `/interviews`, `"career match"` → `/careers`, else `/profile`) — brittle only if the backend's
 wording changes without updating this list, which is an acceptable coupling for four short rules.
+
+## Admin panel (Phase 10)
+
+`/admin` sits behind `hooks/use-require-admin.ts` instead of `useRequireAuth()` — it checks
+`user.role === "admin"` and bounces anyone else to `/` (a logged-out visitor still goes to
+`/login` first). This is UX only, same caveat as every other client-side guard in this app: the
+real boundary is the backend's `require_role(UserRole.admin)` on every `/admin/*` call. The
+"Admin" link in `site-header.tsx` is conditionally rendered on `user.role`, so a student never
+even sees it.
+
+The four catalogue pages (`/admin/career-roles`, `/admin/learning-resources`,
+`/admin/job-postings`, `/admin/interview-questions`) all follow the same shape as the Phase 4
+profile sections: a list, a `+ Add X` button that reveals an inline create form, per-item `Edit`
+that swaps the same form in with values pre-filled, and `InlineConfirmButton` for delete. Unlike
+the RHF + Zod forms elsewhere in the app, these are plain `useState`-controlled forms with native
+`required` validation — a deliberate scope choice for internal admin tooling, matching the
+similarly-plain interview-answer and resume-upload forms rather than the public-facing,
+schema-validated auth/profile forms. Every form's skill field is `features/admin/
+skill-ref-input.tsx`, shared across all four since every catalogue tags itself with the same
+(name, category) list, added as chips with an inline text input + category select — typing a
+name that doesn't exist yet in the catalogue is exactly how an admin introduces a new one.
+
+`/admin/users` lists every account with an Activate/Deactivate toggle; the toggle for the
+signed-in admin's own row is disabled client-side (title-tooltip explains why) mirroring the
+backend's `400 cannot_deactivate_self` — a UX nicety, not the enforcement.

@@ -32,6 +32,11 @@ export function SiteHeader() {
             <Link href="/resume" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50">
               Resume
             </Link>
+            {user.role === "admin" && (
+              <Link href="/admin" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50">
+                Admin
+              </Link>
+            )}
             <Link href="/profile" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50">
               {user.full_name}
             </Link>
