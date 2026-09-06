@@ -20,13 +20,14 @@ Changing it requires `docker compose build frontend`.
 ## Structure
 
 ```
-app/          Routes (App Router) — login/, register/ (Phase 3), profile/ (Phase 4),
-               resume/ (Phase 5), careers/ + careers/[id]/ (Phase 6),
-               jobs/ + jobs/[id]/, learning/ (Phase 7), interviews/ + interviews/[id]/ (Phase 8)
+app/          Routes (App Router) — page.tsx is the dashboard (Phase 9, protected — see below);
+               login/, register/ (Phase 3), profile/ (Phase 4), resume/ (Phase 5),
+               careers/ + careers/[id]/ (Phase 6), jobs/ + jobs/[id]/, learning/ (Phase 7),
+               interviews/ + interviews/[id]/ (Phase 8)
 components/
   ui/          Small presentational primitives (button, text-field, textarea-field,
                select-field, inline-confirm-button, score-bar — shared by resume, careers,
-               jobs & interviews)
+               jobs & interviews; progress-ring and stat-card are dashboard-only so far)
   layout/      Page shells (site-header, auth-shell, section-card)
 features/
   auth/        Zod schemas + AuthProvider context
@@ -41,6 +42,7 @@ features/
   learning/    api.ts, use-learning-resources.ts (re-fetches on skill filter change)
   interview/   api.ts, use-interview-sessions.ts — the list page's data layer; the session
                detail page fetches (and re-fetches after each answer) inline
+  dashboard/   api.ts, use-dashboard.ts — one endpoint, one hook, powers the whole home page
 hooks/         Shared React hooks — use-require-auth.ts guards a page client-side
 lib/           Cross-cutting utilities — api-client.ts wraps every backend call and attaches
                the auth header; auth-token.ts is the only place that touches localStorage
@@ -114,3 +116,19 @@ its AI feedback and score. Submitting an answer calls a `refetch()` of the whole
 local splice of the new answer into state) specifically so `status`, `completed_at`, and
 `average_score` — which the backend may have just changed server-side (auto-completion) — stay
 correct without hand-written client-side logic to mirror that transition.
+
+## Dashboard (Phase 9)
+
+`/` (`app/page.tsx`) replaces the Phase 2 API/DB scaffold page it started as — its own comment
+said this would happen "in a later phase," and Phase 9 is it. Like every other protected page it
+sits behind `useRequireAuth()`, so a logged-out visit to `/` still bounces to `/login`; login and
+register now redirect to `/` instead of `/profile`.
+
+The page is one `useDashboard()` call rendering a hero (greeting + `components/ui/progress-ring.tsx`
+for profile-completion, an SVG ring sharing `ScoreBar`'s color thresholds), a `StatCard` grid
+(skills count, resume score, best career match, interview average — icons from `lucide-react`,
+the one new dependency this phase added), a profile checklist, a suggested-actions list, and
+top-3 career/job match cards. `suggestionHref()` routes each suggestion string to the page that
+addresses it via a plain substring match (`"resume"` → `/resume`, `"mock interview"` →
+`/interviews`, `"career match"` → `/careers`, else `/profile`) — brittle only if the backend's
+wording changes without updating this list, which is an acceptable coupling for four short rules.

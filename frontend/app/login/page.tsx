@@ -27,7 +27,7 @@ export default function LoginPage() {
     setServerError(null);
     try {
       await login(input);
-      router.push("/profile");
+      router.push("/");
     } catch (err) {
       setServerError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
     }

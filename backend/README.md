@@ -31,17 +31,23 @@ app/
   models/        SQLAlchemy models: user.py (Phase 3); student_profile.py, skill.py,
                  student_skill.py, project.py, experience.py, certification.py (Phase 4);
                  resume.py (Phase 5); career_role.py (Phase 6); learning_resource.py,
-                 job_posting.py (Phase 7); interview_question.py, mock_interview.py (Phase 8)
+                 job_posting.py (Phase 7); interview_question.py, mock_interview.py (Phase 8).
+                 No new tables in Phase 9 — the dashboard is read-only composition.
   schemas/       Pydantic request/response models. skill_match.py's MatchedSkill is shared
                  between career.py and job.py — both run their skills through the same
-                 skill_gap engine and return the same "skill + proficiency" shape
+                 skill_gap engine and return the same "skill + proficiency" shape.
+                 dashboard.py reuses CareerListItem/JobListItem as-is for the "top matches"
+                 cards rather than defining a second shape for the same data
   services/      Business logic — routers never hash a password or query the DB directly.
                  skill_gap.py (Phase 6) is a pure, DB-free scoring function, deliberately kept
                  separate from career_service.py/job_service.py (which load the data it scores).
                  learning_service.py (Phase 7) composes CareerService rather than recomputing
                  gaps itself — "what's missing" is Phase 6's job, "how do I learn it" is Phase 7's.
                  interview_service.py (Phase 8) picks a session's fixed question set once at
-                 start time and scores each answer through app/ai/interview_provider.py
+                 start time and scores each answer through app/ai/interview_provider.py.
+                 dashboard_service.py (Phase 9) composes ProfileRepository/CareerService/
+                 JobService/MockInterviewSessionRepository — it computes nothing those modules
+                 don't already compute, except profile-completion scoring and suggested actions
   repositories/  Query objects — the only layer that writes SQLAlchemy queries
   ai/            Resume text extraction (parsing.py), structured-data extraction
                  (extraction.py), and the AIProvider interface + implementations
@@ -51,7 +57,8 @@ app/
                  module rather than reusing AIProvider's method signature
 migrations/      Alembic — 0001 (users), 0002 (profile/skills/projects/experiences/certifications),
                  0003 (resumes), 0004 (career roles), 0005 (learning resources + job postings),
-                 0006 (interview questions + mock interview sessions/answers)
+                 0006 (interview questions + mock interview sessions/answers). Nothing added
+                 in Phase 9 — no new tables.
 seed/            career_roles.py (Phase 6), learning_resources.py + job_postings.py (Phase 7),
                  interview_questions.py (Phase 8) — all idempotent by title (job postings:
                  title+company); see below
@@ -59,6 +66,26 @@ tests/           pytest — conftest.py's `client` fixture runs against a dispos
                  SQLite DB (models use dialect-generic types for exactly this reason), so the
                  suite needs no live Postgres
 ```
+
+## Dashboard module (Phase 9)
+
+- `GET /dashboard` is the only new endpoint — a read-only aggregate of what every earlier
+  phase's service already computes, gathered into one response so the frontend renders its
+  home page in one round trip instead of six. No new tables.
+- **Profile completion** (`compute_profile_completion` in `dashboard_service.py`) is an
+  equally-weighted 9-item checklist (academic info, bio, 1+ skill, 3+ skills, 1+ project,
+  experience, a certification, a resume, a social/portfolio link) — same "every point maps to
+  one visible, explainable reason" philosophy as the resume analyzer and the skill-gap formula,
+  just applied to profile completeness instead of a score. It's a pure function tested directly
+  in `tests/test_dashboard.py`, independent of the DB.
+- **Suggested actions** is a short rule-based list (resume missing → upload it; fewer than 3
+  skills → add more; no projects → add one; no interview sessions → try one; best career match
+  under 50% → check its gap), capped at 4 and evaluated in that priority order — the same
+  "explainable, not a black box" stance as everything else the AI/scoring layer produces here.
+- Everything else — latest resume, top 3 career matches, top 3 job matches, interview stats — is
+  exactly what `ResumeRepository`/`CareerService`/`JobService`/`MockInterviewSessionRepository`
+  already return; the dashboard route just slices and re-wraps it, so a change to how those
+  modules score something is automatically reflected on the dashboard with no duplicated logic.
 
 ## Interview module (Phase 8)
 
