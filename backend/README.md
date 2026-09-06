@@ -10,6 +10,7 @@ python -m venv .venv && .venv/Scripts/activate   # source .venv/bin/activate on 
 pip install -r requirements-dev.txt
 cp .env.example .env
 alembic upgrade head              # creates the schema against DATABASE_URL
+python -m seed.career_roles       # one-time: populates the career-role catalogue (Phase 6)
 uvicorn app.main:app --reload     # http://localhost:8000 — docs at /docs
 pytest -v
 ```
@@ -26,22 +27,41 @@ app/
   db/            Engine/session + declarative base
   models/        SQLAlchemy models: user.py (Phase 3); student_profile.py, skill.py,
                  student_skill.py, project.py, experience.py, certification.py (Phase 4);
-                 resume.py (Phase 5)
+                 resume.py (Phase 5); career_role.py (Phase 6)
   schemas/       Pydantic request/response models
-  services/      Business logic — routers never hash a password or query the DB directly
+  services/      Business logic — routers never hash a password or query the DB directly.
+                 skill_gap.py (Phase 6) is a pure, DB-free scoring function, deliberately kept
+                 separate from career_service.py (which loads the data it scores)
   repositories/  Query objects — the only layer that writes SQLAlchemy queries
   ai/            Resume text extraction (parsing.py), structured-data extraction
                  (extraction.py), and the AIProvider interface + implementations
                  (provider.py) — Phase 5
 migrations/      Alembic — 0001 (users), 0002 (profile/skills/projects/experiences/certifications),
-                 0003 (resumes)
-seed/            Seed/demo data loaders (added Phase 6+)
+                 0003 (resumes), 0004 (career roles)
+seed/            career_roles.py (Phase 6) — the only seed loader so far; see below
 tests/           pytest — conftest.py's `client` fixture runs against a disposable in-memory
                  SQLite DB (models use dialect-generic types for exactly this reason), so the
                  suite needs no live Postgres
 ```
 
-`seed/` is intentionally still empty — it fills in starting Phase 6.
+## Career model (Phase 6)
+
+- `career_roles` + `career_role_skills` are a **platform-curated catalogue**, not
+  student-authored — there's no `POST /careers`. They're populated by `seed/career_roles.py`
+  (`python -m seed.career_roles`, idempotent by title), and full admin CRUD for them is
+  Phase 10's job.
+- The skill-gap score (`app/services/skill_gap.py`) is a deterministic weighted formula, the
+  same explainability philosophy as the resume analyzer's `MockAIProvider`: every required
+  skill counts double a preferred one, and a matched skill earns partial credit from the
+  student's proficiency level (beginner=0.5× … advanced/expert=1.0×) rather than a flat
+  yes/no. `compute_skill_gap()` is a pure function over plain data — no DB, no HTTP — so it's
+  unit-tested directly in `tests/test_careers.py` alongside the route-level tests.
+- Nothing is stored per-student: `GET /careers` and `GET /careers/{id}` recompute the score
+  fresh from the student's current `StudentSkill` rows on every request, so editing your
+  profile skills immediately changes your career matches with no cache to invalidate.
+- `GET /careers` doubles as the "recommendations" list — it returns every role already ranked
+  by score, since the catalogue is small enough (~8 seeded roles) that a separate
+  `/recommendations` endpoint would just be a truncated version of the same list.
 
 ## Resume model (Phase 5)
 

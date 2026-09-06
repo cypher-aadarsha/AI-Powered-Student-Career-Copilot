@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { InlineConfirmButton } from "@/components/ui/inline-confirm-button";
+import { ScoreBar } from "@/components/ui/score-bar";
 import type { Resume, ResumeStatus } from "@/types/resume";
 import { resumeApi } from "./api";
 
@@ -23,18 +24,6 @@ const statusColor: Record<ResumeStatus, string> = {
 function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-function ScoreBar({ score }: { score: number }) {
-  const color = score >= 70 ? "bg-emerald-500" : score >= 40 ? "bg-amber-500" : "bg-red-500";
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-2 w-32 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-        <div className={`h-full ${color}`} style={{ width: `${score}%` }} />
-      </div>
-      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">{score}/100</span>
-    </div>
-  );
 }
 
 function BulletList({ label, items }: { label: string; items: string[] }) {

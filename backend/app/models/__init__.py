@@ -1,6 +1,7 @@
 """Import every model module here so Base.metadata sees all tables —
 Alembic's env.py and the test fixtures both rely on this side effect.
 """
+from app.models.career_role import CareerRole, CareerRoleSkill, RoleSkillImportance  # noqa: F401
 from app.models.certification import Certification  # noqa: F401
 from app.models.experience import Experience, EmploymentType  # noqa: F401
 from app.models.project import Project, ProjectSkill  # noqa: F401

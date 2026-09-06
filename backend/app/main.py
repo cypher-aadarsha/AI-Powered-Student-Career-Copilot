@@ -6,7 +6,7 @@ TDD §10 for the full intended module layout.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import admin, auth, health, profile, resumes, users
+from app.api.v1 import admin, auth, careers, health, profile, resumes, users
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
@@ -35,6 +35,7 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(profile.router, prefix="/api/v1")
 app.include_router(resumes.router, prefix="/api/v1")
+app.include_router(careers.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 
 

@@ -20,10 +20,11 @@ Changing it requires `docker compose build frontend`.
 ## Structure
 
 ```
-app/          Routes (App Router) — login/, register/ (Phase 3), profile/ (Phase 4), resume/ (Phase 5)
+app/          Routes (App Router) — login/, register/ (Phase 3), profile/ (Phase 4),
+               resume/ (Phase 5), careers/ + careers/[id]/ (Phase 6)
 components/
   ui/          Small presentational primitives (button, text-field, textarea-field,
-               select-field, inline-confirm-button)
+               select-field, inline-confirm-button, score-bar — shared by resume & careers)
   layout/      Page shells (site-header, auth-shell, section-card)
 features/
   auth/        Zod schemas + AuthProvider context
@@ -32,6 +33,8 @@ features/
   resume/      api.ts (backend calls, including the multipart upload), use-resumes.ts,
                upload-form.tsx, resume-card.tsx (score bar, detected skills, strengths/
                suggestions)
+  career/      api.ts, use-careers.ts — the list page's data layer (the detail page fetches
+               inline since it's the only place a single role's data is needed)
 hooks/         Shared React hooks — use-require-auth.ts guards a page client-side
 lib/           Cross-cutting utilities — api-client.ts wraps every backend call and attaches
                the auth header; auth-token.ts is the only place that touches localStorage
@@ -68,3 +71,14 @@ otherwise, which is exactly what a file upload needs. Each resume card
 (`features/resume/resume-card.tsx`) shows its parse status, a score bar, detected catalogue
 skills, and AI-generated strengths/suggestions once `status` is `"parsed"`, with re-analyze and
 two-step delete actions matching the profile page's `InlineConfirmButton` pattern.
+
+## Careers pages (Phase 6)
+
+`/careers` lists every role from `GET /careers`, already ranked by score server-side — the page
+just renders the order it receives. `/careers/[id]` is a client component that reads the route
+param via `useParams()` (not the App Router's async `params` prop) so it can sit behind the same
+`useRequireAuth()` client-side guard as every other protected page, and fetches inline with a
+local `useEffect` rather than a reusable hook since it's the only place a single role's detail is
+ever needed. Both pages reuse `components/ui/score-bar.tsx`, the same 0–100 score visualization
+the resume analyzer uses — one shared component now that two features need identical fit-score
+UI.

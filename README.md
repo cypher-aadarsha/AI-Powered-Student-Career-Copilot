@@ -8,11 +8,11 @@ BSc. CSIT 6th Semester Software Engineering project — built as a production-qu
 monolith rather than a toy CRUD demo. The full architecture, database design, algorithms, and
 phased delivery plan are documented in the **Technical Design Document** (Phase 1 deliverable).
 
-**Status:** Phase 5 — Resume System. On top of profile management (Phase 4), a student can
-upload a PDF/DOCX resume and get it parsed (contact info, links, catalogue skills detected in
-the text) and analyzed by a pluggable AI layer: a deterministic, fully-explainable heuristic
-provider by default, or a real LLM if one is configured. Every other feature module lands in
-the phases that follow.
+**Status:** Phase 6 — Career & Skill System. On top of the resume system (Phase 5), a student
+can browse a curated catalogue of career roles ranked by an explainable skill-gap score computed
+from their own profile skills, then drill into any role to see exactly which required/preferred
+skills they already have and which ones close the gap. Every other feature module lands in the
+phases that follow.
 
 ## Stack
 
@@ -56,9 +56,17 @@ docker compose up --build
 The backend container runs `alembic upgrade head` on boot, so the database schema is always
 current — no manual migration step needed under Docker.
 
+The backend container does **not** seed the career-role catalogue automatically (that's
+curated reference data, not user data) — run it once after the containers are up:
+
+```bash
+docker compose exec backend python -m seed.career_roles
+```
+
 Then open:
 - **Frontend:** http://localhost:3000 — register an account, log in, fill in your profile at
-  `/profile`, and upload a resume for parsing + AI analysis at `/resume`.
+  `/profile`, upload a resume for parsing + AI analysis at `/resume`, and see your ranked career
+  matches at `/careers`.
 - **Backend API docs (OpenAPI/Swagger):** http://localhost:8000/docs
 - **Health check:** http://localhost:8000/api/v1/health
 
@@ -78,6 +86,7 @@ python -m venv .venv
 pip install -r requirements.txt
 cp .env.example .env           # then point DATABASE_URL at your local Postgres
 alembic upgrade head
+python -m seed.career_roles   # one-time: populates the career-role catalogue Phase 6 needs
 uvicorn app.main:app --reload
 ```
 
@@ -92,12 +101,13 @@ npm run dev
 ## Testing
 
 ```bash
-# Backend — 44 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
+# Backend — 56 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
 # the profile module (core fields, skills with case-insensitive dedup, projects with skill
-# tagging, experiences, certifications, cross-user ownership checks), and the resume module
+# tagging, experiences, certifications, cross-user ownership checks), the resume module
 # (PDF/DOCX upload + parsing, contact-info/skill extraction, the heuristic AI analyzer,
-# file-type/size validation, ownership scoping). Runs against a disposable in-memory SQLite
-# DB, no Postgres needed.
+# file-type/size validation, ownership scoping), and the career module (skill-gap scoring
+# formula, ranked recommendations, per-role detail, seed-script idempotency). Runs against
+# a disposable in-memory SQLite DB, no Postgres needed.
 cd backend && pytest -v
 
 # Frontend build + lint
@@ -124,8 +134,8 @@ version-controlled.
 2. ✅ Project initialization
 3. ✅ Database & authentication
 4. ✅ Student profile
-5. ✅ Resume system (upload, parsing, AI analysis) — **this phase**
-6. ⬜ Career & skill system (skill-gap analysis, career recommendations)
+5. ✅ Resume system (upload, parsing, AI analysis)
+6. ✅ Career & skill system (skill-gap analysis, career recommendations) — **this phase**
 7. ⬜ Learning resources & job matching
 8. ⬜ Interview preparation & mock interviews
 9. ⬜ Career dashboard
