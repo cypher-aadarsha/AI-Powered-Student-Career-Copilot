@@ -21,3 +21,5 @@ def configure_logging(level: str = "INFO") -> None:
 
     # Quiet noisy third-party loggers unless something actually goes wrong.
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    for name in ("pdfminer", "pdfplumber", "PIL", "python_multipart"):
+        logging.getLogger(name).setLevel(logging.WARNING)

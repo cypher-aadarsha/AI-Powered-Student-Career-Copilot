@@ -8,10 +8,11 @@ BSc. CSIT 6th Semester Software Engineering project — built as a production-qu
 monolith rather than a toy CRUD demo. The full architecture, database design, algorithms, and
 phased delivery plan are documented in the **Technical Design Document** (Phase 1 deliverable).
 
-**Status:** Phase 4 — Student Profile. On top of auth (Phase 3), a student can now maintain a
-full profile: academic info, skills (a shared, normalized catalogue), projects (taggable with
-skills used), work/internship experience, and certifications — real relational tables with
-full CRUD, not a JSON blob. Every other feature module lands in the phases that follow.
+**Status:** Phase 5 — Resume System. On top of profile management (Phase 4), a student can
+upload a PDF/DOCX resume and get it parsed (contact info, links, catalogue skills detected in
+the text) and analyzed by a pluggable AI layer: a deterministic, fully-explainable heuristic
+provider by default, or a real LLM if one is configured. Every other feature module lands in
+the phases that follow.
 
 ## Stack
 
@@ -20,7 +21,7 @@ full CRUD, not a JSON blob. Every other feature module lands in the phases that 
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, React Hook Form + Zod |
 | Backend | FastAPI, Pydantic v2, SQLAlchemy 2.0 |
 | Database | PostgreSQL 16, Alembic migrations |
-| AI/NLP | spaCy, sentence-transformers, PyMuPDF/pdfplumber, python-docx (added Phase 5) |
+| AI/NLP | pdfplumber, python-docx (Phase 5); sentence-transformers/spaCy planned for Phase 6's semantic skill-gap matching |
 | Auth | JWT (python-jose) + bcrypt (passlib) |
 | DevOps | Docker, Docker Compose, pytest, Jest |
 
@@ -56,8 +57,8 @@ The backend container runs `alembic upgrade head` on boot, so the database schem
 current — no manual migration step needed under Docker.
 
 Then open:
-- **Frontend:** http://localhost:3000 — register an account, log in, and land on `/profile` to
-  fill in your academic info, skills, projects, experience, and certifications.
+- **Frontend:** http://localhost:3000 — register an account, log in, fill in your profile at
+  `/profile`, and upload a resume for parsing + AI analysis at `/resume`.
 - **Backend API docs (OpenAPI/Swagger):** http://localhost:8000/docs
 - **Health check:** http://localhost:8000/api/v1/health
 
@@ -91,10 +92,12 @@ npm run dev
 ## Testing
 
 ```bash
-# Backend — 31 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
-# and the profile module (core fields, skills with case-insensitive dedup, projects with
-# skill tagging, experiences, certifications, cross-user ownership checks). Runs against a
-# disposable in-memory SQLite DB, no Postgres needed.
+# Backend — 44 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
+# the profile module (core fields, skills with case-insensitive dedup, projects with skill
+# tagging, experiences, certifications, cross-user ownership checks), and the resume module
+# (PDF/DOCX upload + parsing, contact-info/skill extraction, the heuristic AI analyzer,
+# file-type/size validation, ownership scoping). Runs against a disposable in-memory SQLite
+# DB, no Postgres needed.
 cd backend && pytest -v
 
 # Frontend build + lint
@@ -120,8 +123,8 @@ version-controlled.
 1. ✅ Requirements & architecture (Technical Design Document)
 2. ✅ Project initialization
 3. ✅ Database & authentication
-4. ✅ Student profile — **this phase**
-5. ⬜ Resume system (upload, parsing, AI analysis)
+4. ✅ Student profile
+5. ✅ Resume system (upload, parsing, AI analysis) — **this phase**
 6. ⬜ Career & skill system (skill-gap analysis, career recommendations)
 7. ⬜ Learning resources & job matching
 8. ⬜ Interview preparation & mock interviews

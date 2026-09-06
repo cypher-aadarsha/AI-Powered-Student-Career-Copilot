@@ -48,3 +48,6 @@ class StudentProfile(Base):
     certifications: Mapped[list["Certification"]] = relationship(
         back_populates="profile", cascade="all, delete-orphan", order_by="Certification.created_at.desc()"
     )
+    resumes: Mapped[list["Resume"]] = relationship(
+        back_populates="profile", cascade="all, delete-orphan", order_by="Resume.created_at.desc()"
+    )

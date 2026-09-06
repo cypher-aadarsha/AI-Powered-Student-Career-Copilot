@@ -20,7 +20,7 @@ Changing it requires `docker compose build frontend`.
 ## Structure
 
 ```
-app/          Routes (App Router) — login/, register/ (Phase 3), profile/ (Phase 4)
+app/          Routes (App Router) — login/, register/ (Phase 3), profile/ (Phase 4), resume/ (Phase 5)
 components/
   ui/          Small presentational primitives (button, text-field, textarea-field,
                select-field, inline-confirm-button)
@@ -29,6 +29,9 @@ features/
   auth/        Zod schemas + AuthProvider context
   profile/     Zod schemas, api.ts (backend calls), use-profile.ts, and one component per
                profile section (skills/projects/experiences/certifications)
+  resume/      api.ts (backend calls, including the multipart upload), use-resumes.ts,
+               upload-form.tsx, resume-card.tsx (score bar, detected skills, strengths/
+               suggestions)
 hooks/         Shared React hooks — use-require-auth.ts guards a page client-side
 lib/           Cross-cutting utilities — api-client.ts wraps every backend call and attaches
                the auth header; auth-token.ts is the only place that touches localStorage
@@ -55,3 +58,13 @@ just refetches the whole profile; simple and fast enough at this data size. RHF 
 the library's `useForm<Input, unknown, Output>` three-generic pattern wherever a schema coerces
 or defaults a value (e.g. `semester` string → number), since the form's pre-submit shape and the
 resolver's post-validation shape genuinely differ.
+
+## Resume page (Phase 5)
+
+`/resume` uploads a PDF/DOCX via `resumeApi.upload` (`features/resume/api.ts`) — a plain
+`FormData` body with no `Content-Type` header set explicitly, so the browser attaches the
+multipart boundary itself; `apiFetch` only ever adds the `Authorization` header unless told
+otherwise, which is exactly what a file upload needs. Each resume card
+(`features/resume/resume-card.tsx`) shows its parse status, a score bar, detected catalogue
+skills, and AI-generated strengths/suggestions once `status` is `"parsed"`, with re-analyze and
+two-step delete actions matching the profile page's `InlineConfirmButton` pattern.

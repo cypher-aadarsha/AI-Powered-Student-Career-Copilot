@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     ai_provider: str = Field(default="mock", description="'mock' or 'llm' — see ai/provider.py")
     llm_api_key: str | None = None
     llm_api_base_url: str | None = None
+    llm_model: str = Field(default="gpt-4o-mini", description="Chat-completions model name for the 'llm' provider.")
+
+    # --- Resume storage (Phase 5) ---
+    resume_storage_dir: str = Field(default="storage/resumes", description="Path is relative to the backend/ dir.")
+    resume_max_size_mb: int = Field(default=5)
 
     @field_validator("llm_api_key", "llm_api_base_url", mode="before")
     @classmethod
