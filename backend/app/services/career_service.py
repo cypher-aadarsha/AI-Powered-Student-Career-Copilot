@@ -13,7 +13,7 @@ from app.models.career_role import CareerRole, RoleSkillImportance
 from app.models.student_skill import ProficiencyLevel
 from app.repositories.career_role_repository import CareerRoleRepository
 from app.repositories.profile_repository import ProfileRepository
-from app.services.skill_gap import SkillGapResult, compute_skill_gap
+from app.services.skill_gap import SkillGapResult, compute_skill_gap, student_skill_levels
 
 
 class CareerService:
@@ -40,10 +40,7 @@ class CareerService:
     # --- internals -----------------------------------------------------
 
     def _student_skills(self, user_id: uuid.UUID) -> dict[uuid.UUID, ProficiencyLevel]:
-        profile = self.profiles.get_by_user_id(user_id)
-        if profile is None:
-            return {}
-        return {student_skill.skill_id: student_skill.proficiency_level for student_skill in profile.skills}
+        return student_skill_levels(self.profiles.get_by_user_id(user_id))
 
     def _gap_for_role(self, role: CareerRole, student_skills: dict[uuid.UUID, ProficiencyLevel]) -> SkillGapResult:
         required = [rs.skill for rs in role.skills if rs.importance == RoleSkillImportance.required]

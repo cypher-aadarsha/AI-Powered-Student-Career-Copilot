@@ -9,9 +9,11 @@ via Docker Compose.
 python -m venv .venv && .venv/Scripts/activate   # source .venv/bin/activate on macOS/Linux
 pip install -r requirements-dev.txt
 cp .env.example .env
-alembic upgrade head              # creates the schema against DATABASE_URL
-python -m seed.career_roles       # one-time: populates the career-role catalogue (Phase 6)
-uvicorn app.main:app --reload     # http://localhost:8000 — docs at /docs
+alembic upgrade head                    # creates the schema against DATABASE_URL
+python -m seed.career_roles             # one-time: career-role catalogue (Phase 6)
+python -m seed.learning_resources       # one-time: learning-resource catalogue (Phase 7)
+python -m seed.job_postings             # one-time: demo job postings (Phase 7)
+uvicorn app.main:app --reload           # http://localhost:8000 — docs at /docs
 pytest -v
 ```
 
@@ -27,22 +29,46 @@ app/
   db/            Engine/session + declarative base
   models/        SQLAlchemy models: user.py (Phase 3); student_profile.py, skill.py,
                  student_skill.py, project.py, experience.py, certification.py (Phase 4);
-                 resume.py (Phase 5); career_role.py (Phase 6)
-  schemas/       Pydantic request/response models
+                 resume.py (Phase 5); career_role.py (Phase 6); learning_resource.py,
+                 job_posting.py (Phase 7)
+  schemas/       Pydantic request/response models. skill_match.py's MatchedSkill is shared
+                 between career.py and job.py — both run their skills through the same
+                 skill_gap engine and return the same "skill + proficiency" shape
   services/      Business logic — routers never hash a password or query the DB directly.
                  skill_gap.py (Phase 6) is a pure, DB-free scoring function, deliberately kept
-                 separate from career_service.py (which loads the data it scores)
+                 separate from career_service.py/job_service.py (which load the data it scores).
+                 learning_service.py (Phase 7) composes CareerService rather than recomputing
+                 gaps itself — "what's missing" is Phase 6's job, "how do I learn it" is Phase 7's
   repositories/  Query objects — the only layer that writes SQLAlchemy queries
   ai/            Resume text extraction (parsing.py), structured-data extraction
                  (extraction.py), and the AIProvider interface + implementations
                  (provider.py) — Phase 5
 migrations/      Alembic — 0001 (users), 0002 (profile/skills/projects/experiences/certifications),
-                 0003 (resumes), 0004 (career roles)
-seed/            career_roles.py (Phase 6) — the only seed loader so far; see below
+                 0003 (resumes), 0004 (career roles), 0005 (learning resources + job postings)
+seed/            career_roles.py (Phase 6), learning_resources.py + job_postings.py (Phase 7) —
+                 all idempotent by title (job postings: title+company); see below
 tests/           pytest — conftest.py's `client` fixture runs against a disposable in-memory
                  SQLite DB (models use dialect-generic types for exactly this reason), so the
                  suite needs no live Postgres
 ```
+
+## Learning & job modules (Phase 7)
+
+- `learning_resources` + `learning_resource_skills` and `job_postings` + `job_posting_skills`
+  are both **platform-curated catalogues**, same pattern as `career_roles` (Phase 6) — seeded via
+  `seed/learning_resources.py` and `seed/job_postings.py`, no student-facing create endpoint.
+  Every learning-resource URL points at a real, stable, top-level page from a well-known
+  provider (official docs, freeCodeCamp, Khan Academy, etc.); every job posting is clearly
+  fictional demo data with an `apply_url` on `example.com` (RFC 2606's reserved domain) so it's
+  never mistaken for a real listing.
+- `GET /learning-resources?skill_id=` lists resources, optionally filtered to ones teaching a
+  given skill; `GET /careers/{role_id}/learning-plan` (on the *careers* router, since it's
+  career-scoped) reuses `CareerService.get_role_detail` to find what's missing, then attaches
+  resources per missing skill — Phase 6 finds the gap, Phase 7 finds the fix.
+- `GET /jobs` and `GET /jobs/{id}` mirror the career endpoints exactly, but a job's skill list
+  has no required/preferred split — every skill is passed to `compute_skill_gap()` as
+  "required" with an empty preferred list, reusing the exact same weighted-proficiency formula
+  instead of inventing a second scoring rule for jobs.
 
 ## Career model (Phase 6)
 
@@ -79,7 +105,8 @@ tests/           pytest — conftest.py's `client` fixture runs against a dispos
 - Structured extraction (`app/ai/extraction.py`) is rule-based, not ML: regex for emails/
   phones/links, and a word-boundary match of each *existing catalogue skill name* against the
   resume text. It only ever confirms skills already in the shared catalogue (see Phase 4) — it
-  doesn't invent new ones. Semantic/fuzzy matching is Phase 6's job.
+  doesn't invent new ones. (Phase 6/7's skill-gap matching turned out to be a deterministic
+  weighted formula too, not semantic embeddings — see `app/services/skill_gap.py`.)
 - AI analysis (`app/ai/provider.py`) is behind an `AIProvider` interface: `MockAIProvider` (the
   default — deterministic, explainable, no network) scores against concrete rubric-driven
   checks (section presence, action verbs, quantified achievements, contact info, detected-skill

@@ -7,8 +7,8 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.student_skill import ProficiencyLevel
 from app.schemas.profile import SkillPublic
+from app.schemas.skill_match import MatchedSkill
 
 
 class CareerRoleSummary(BaseModel):
@@ -16,11 +16,6 @@ class CareerRoleSummary(BaseModel):
     id: uuid.UUID
     title: str
     description: str | None
-
-
-class MatchedSkill(BaseModel):
-    skill: SkillPublic
-    proficiency_level: ProficiencyLevel
 
 
 class CareerListItem(BaseModel):

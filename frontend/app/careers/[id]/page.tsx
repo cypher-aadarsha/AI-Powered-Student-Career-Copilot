@@ -10,11 +10,13 @@ import { useRequireAuth } from "@/hooks/use-require-auth";
 import { careerApi } from "@/features/career/api";
 import { ApiError } from "@/lib/api-client";
 import type { CareerDetail } from "@/types/career";
+import type { RoleLearningPlan } from "@/types/learning";
 
 export default function CareerDetailPage() {
   const { isLoading: isAuthLoading, user } = useRequireAuth();
   const params = useParams<{ id: string }>();
   const [detail, setDetail] = useState<CareerDetail | null>(null);
+  const [learningPlan, setLearningPlan] = useState<RoleLearningPlan | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +31,14 @@ export default function CareerDetailPage() {
         if (!cancelled) setError(err instanceof ApiError ? err.message : "Could not load this role.");
       } finally {
         if (!cancelled) setIsLoading(false);
+      }
+      // Best-effort: the learning plan is a nice-to-have alongside the fit
+      // score, so a failure here doesn't block the page from rendering.
+      try {
+        const plan = await careerApi.getLearningPlan(params.id);
+        if (!cancelled) setLearningPlan(plan);
+      } catch {
+        // no-op — the "Close your skill gap" section just won't render
       }
     })();
     return () => {
@@ -115,6 +125,37 @@ export default function CareerDetailPage() {
               >
                 {skill.name}
               </span>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {learningPlan && (learningPlan.missing_required.length > 0 || learningPlan.missing_preferred.length > 0) && (
+        <SectionCard title="Close your skill gap" description="Resources for each missing skill, most important first.">
+          <div className="flex flex-col gap-4">
+            {[...learningPlan.missing_required, ...learningPlan.missing_preferred].map(({ skill, resources }) => (
+              <div key={skill.id}>
+                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{skill.name}</p>
+                {resources.length === 0 ? (
+                  <p className="mt-1 text-xs text-zinc-400">No resources yet for this skill.</p>
+                ) : (
+                  <ul className="mt-1 flex flex-col gap-1">
+                    {resources.map((resource) => (
+                      <li key={resource.id}>
+                        <a
+                          href={resource.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm text-zinc-500 underline hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+                        >
+                          {resource.title}
+                        </a>
+                        <span className="text-xs text-zinc-400"> · {resource.provider}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             ))}
           </div>
         </SectionCard>

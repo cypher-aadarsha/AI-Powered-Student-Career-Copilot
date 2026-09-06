@@ -8,11 +8,11 @@ BSc. CSIT 6th Semester Software Engineering project — built as a production-qu
 monolith rather than a toy CRUD demo. The full architecture, database design, algorithms, and
 phased delivery plan are documented in the **Technical Design Document** (Phase 1 deliverable).
 
-**Status:** Phase 6 — Career & Skill System. On top of the resume system (Phase 5), a student
-can browse a curated catalogue of career roles ranked by an explainable skill-gap score computed
-from their own profile skills, then drill into any role to see exactly which required/preferred
-skills they already have and which ones close the gap. Every other feature module lands in the
-phases that follow.
+**Status:** Phase 7 — Learning Resources & Job Matching. On top of career matching (Phase 6), a
+student can browse curated learning resources (filterable by skill), get a resource-by-resource
+learning plan for closing any career role's skill gap, and see demo job postings ranked by the
+same explainable skill-gap engine the career module uses. Every other feature module lands in
+the phases that follow.
 
 ## Stack
 
@@ -21,7 +21,7 @@ phases that follow.
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, React Hook Form + Zod |
 | Backend | FastAPI, Pydantic v2, SQLAlchemy 2.0 |
 | Database | PostgreSQL 16, Alembic migrations |
-| AI/NLP | pdfplumber, python-docx (Phase 5); sentence-transformers/spaCy planned for Phase 6's semantic skill-gap matching |
+| AI/NLP | pdfplumber, python-docx (Phase 5); skill-gap matching (Phase 6/7) is a deterministic weighted formula, not embeddings — see backend/README |
 | Auth | JWT (python-jose) + bcrypt (passlib) |
 | DevOps | Docker, Docker Compose, pytest, Jest |
 
@@ -56,17 +56,20 @@ docker compose up --build
 The backend container runs `alembic upgrade head` on boot, so the database schema is always
 current — no manual migration step needed under Docker.
 
-The backend container does **not** seed the career-role catalogue automatically (that's
-curated reference data, not user data) — run it once after the containers are up:
+The backend container does **not** seed the curated catalogues automatically (that's reference
+data, not user data) — run these once after the containers are up:
 
 ```bash
 docker compose exec backend python -m seed.career_roles
+docker compose exec backend python -m seed.learning_resources
+docker compose exec backend python -m seed.job_postings
 ```
 
 Then open:
 - **Frontend:** http://localhost:3000 — register an account, log in, fill in your profile at
-  `/profile`, upload a resume for parsing + AI analysis at `/resume`, and see your ranked career
-  matches at `/careers`.
+  `/profile`, upload a resume for parsing + AI analysis at `/resume`, see your ranked career
+  matches at `/careers`, browse `/learning` resources, and check `/jobs` for skill-matched demo
+  postings.
 - **Backend API docs (OpenAPI/Swagger):** http://localhost:8000/docs
 - **Health check:** http://localhost:8000/api/v1/health
 
@@ -86,7 +89,9 @@ python -m venv .venv
 pip install -r requirements.txt
 cp .env.example .env           # then point DATABASE_URL at your local Postgres
 alembic upgrade head
-python -m seed.career_roles   # one-time: populates the career-role catalogue Phase 6 needs
+python -m seed.career_roles        # one-time: career-role catalogue (Phase 6)
+python -m seed.learning_resources  # one-time: learning-resource catalogue (Phase 7)
+python -m seed.job_postings        # one-time: demo job postings (Phase 7)
 uvicorn app.main:app --reload
 ```
 
@@ -101,13 +106,15 @@ npm run dev
 ## Testing
 
 ```bash
-# Backend — 56 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
+# Backend — 73 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
 # the profile module (core fields, skills with case-insensitive dedup, projects with skill
 # tagging, experiences, certifications, cross-user ownership checks), the resume module
 # (PDF/DOCX upload + parsing, contact-info/skill extraction, the heuristic AI analyzer,
-# file-type/size validation, ownership scoping), and the career module (skill-gap scoring
-# formula, ranked recommendations, per-role detail, seed-script idempotency). Runs against
-# a disposable in-memory SQLite DB, no Postgres needed.
+# file-type/size validation, ownership scoping), the career module (skill-gap scoring
+# formula, ranked recommendations, per-role detail, seed-script idempotency), and the
+# learning/job modules (resource browsing + skill filter, the role learning-plan endpoint,
+# job-posting ranking reusing the same skill-gap engine). Runs against a disposable
+# in-memory SQLite DB, no Postgres needed.
 cd backend && pytest -v
 
 # Frontend build + lint
@@ -135,8 +142,8 @@ version-controlled.
 3. ✅ Database & authentication
 4. ✅ Student profile
 5. ✅ Resume system (upload, parsing, AI analysis)
-6. ✅ Career & skill system (skill-gap analysis, career recommendations) — **this phase**
-7. ⬜ Learning resources & job matching
+6. ✅ Career & skill system (skill-gap analysis, career recommendations)
+7. ✅ Learning resources & job matching — **this phase**
 8. ⬜ Interview preparation & mock interviews
 9. ⬜ Career dashboard
 10. ⬜ Admin panel

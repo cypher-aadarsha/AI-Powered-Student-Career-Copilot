@@ -21,10 +21,11 @@ Changing it requires `docker compose build frontend`.
 
 ```
 app/          Routes (App Router) — login/, register/ (Phase 3), profile/ (Phase 4),
-               resume/ (Phase 5), careers/ + careers/[id]/ (Phase 6)
+               resume/ (Phase 5), careers/ + careers/[id]/ (Phase 6),
+               jobs/ + jobs/[id]/, learning/ (Phase 7)
 components/
   ui/          Small presentational primitives (button, text-field, textarea-field,
-               select-field, inline-confirm-button, score-bar — shared by resume & careers)
+               select-field, inline-confirm-button, score-bar — shared by resume, careers & jobs)
   layout/      Page shells (site-header, auth-shell, section-card)
 features/
   auth/        Zod schemas + AuthProvider context
@@ -33,8 +34,10 @@ features/
   resume/      api.ts (backend calls, including the multipart upload), use-resumes.ts,
                upload-form.tsx, resume-card.tsx (score bar, detected skills, strengths/
                suggestions)
-  career/      api.ts, use-careers.ts — the list page's data layer (the detail page fetches
-               inline since it's the only place a single role's data is needed)
+  career/      api.ts (includes getLearningPlan, called from the careers/[id] page),
+               use-careers.ts — the list page's data layer
+  job/         api.ts, use-jobs.ts — same shape as career/, the detail page fetches inline
+  learning/    api.ts, use-learning-resources.ts (re-fetches on skill filter change)
 hooks/         Shared React hooks — use-require-auth.ts guards a page client-side
 lib/           Cross-cutting utilities — api-client.ts wraps every backend call and attaches
                the auth header; auth-token.ts is the only place that touches localStorage
@@ -82,3 +85,19 @@ local `useEffect` rather than a reusable hook since it's the only place a single
 ever needed. Both pages reuse `components/ui/score-bar.tsx`, the same 0–100 score visualization
 the resume analyzer uses — one shared component now that two features need identical fit-score
 UI.
+
+## Jobs & learning pages (Phase 7)
+
+`/jobs` and `/jobs/[id]` are a straight copy of the careers pages' shape (ranked list → detail
+with matched/missing skills), since job matching reuses the exact same backend scoring engine;
+the job detail page adds an external "Apply" link (`target="_blank" rel="noreferrer"`) the
+career pages don't need. `/learning` filters by skill via a chip row: clicking a chip re-fetches
+`GET /learning-resources?skill_id=` through `use-learning-resources.ts` rather than filtering a
+client-side list. The chip options themselves come from a *second*, always-unfiltered call to the
+same hook — deliberately not a ref-backed cache or an effect that calls `setState`, both of which
+this project's React Compiler-aware lint config forbids (see `react-hooks/refs` and
+`react-hooks/set-state-in-effect`); two small requests against a ~20-resource catalogue costs
+nothing. The `careers/[id]` page also calls `careerApi.getLearningPlan(id)` to render a "Close
+your skill gap" section listing resources per missing skill — a best-effort fetch that fails
+silently (the section just doesn't render) since it's a bonus alongside the fit score, not
+required for the page to be useful.

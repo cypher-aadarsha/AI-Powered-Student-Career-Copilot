@@ -10,6 +10,7 @@ import uuid
 from dataclasses import dataclass
 
 from app.models.skill import Skill
+from app.models.student_profile import StudentProfile
 from app.models.student_skill import ProficiencyLevel
 
 REQUIRED_WEIGHT = 2.0
@@ -32,6 +33,15 @@ class SkillGapResult:
     total_required: int
     total_preferred: int
     summary: str
+
+
+def student_skill_levels(profile: StudentProfile | None) -> dict[uuid.UUID, ProficiencyLevel]:
+    """Shared by CareerService and JobService: both need "what does this
+    student know, and at what level" as a plain lookup dict before running
+    it through compute_skill_gap against a role's or job's skill list."""
+    if profile is None:
+        return {}
+    return {student_skill.skill_id: student_skill.proficiency_level for student_skill in profile.skills}
 
 
 def compute_skill_gap(
