@@ -51,3 +51,6 @@ class StudentProfile(Base):
     resumes: Mapped[list["Resume"]] = relationship(
         back_populates="profile", cascade="all, delete-orphan", order_by="Resume.created_at.desc()"
     )
+    mock_interview_sessions: Mapped[list["MockInterviewSession"]] = relationship(
+        back_populates="profile", cascade="all, delete-orphan", order_by="MockInterviewSession.created_at.desc()"
+    )

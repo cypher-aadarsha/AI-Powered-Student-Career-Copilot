@@ -8,11 +8,12 @@ BSc. CSIT 6th Semester Software Engineering project — built as a production-qu
 monolith rather than a toy CRUD demo. The full architecture, database design, algorithms, and
 phased delivery plan are documented in the **Technical Design Document** (Phase 1 deliverable).
 
-**Status:** Phase 7 — Learning Resources & Job Matching. On top of career matching (Phase 6), a
-student can browse curated learning resources (filterable by skill), get a resource-by-resource
-learning plan for closing any career role's skill gap, and see demo job postings ranked by the
-same explainable skill-gap engine the career module uses. Every other feature module lands in
-the phases that follow.
+**Status:** Phase 8 — Interview Preparation & Mock Interviews. On top of learning/job matching
+(Phase 7), a student can run a mock interview session (optionally targeted at a career role, which
+biases the technical questions toward that role's skills) and get instant, explainable AI feedback
+and a score on every answer — the same heuristic-by-default / LLM-if-configured pattern the resume
+analyzer uses, applied to a new kind of content. Every other feature module lands in the phases
+that follow.
 
 ## Stack
 
@@ -63,13 +64,14 @@ data, not user data) — run these once after the containers are up:
 docker compose exec backend python -m seed.career_roles
 docker compose exec backend python -m seed.learning_resources
 docker compose exec backend python -m seed.job_postings
+docker compose exec backend python -m seed.interview_questions
 ```
 
 Then open:
 - **Frontend:** http://localhost:3000 — register an account, log in, fill in your profile at
   `/profile`, upload a resume for parsing + AI analysis at `/resume`, see your ranked career
-  matches at `/careers`, browse `/learning` resources, and check `/jobs` for skill-matched demo
-  postings.
+  matches at `/careers`, browse `/learning` resources, check `/jobs` for skill-matched demo
+  postings, and practice at `/interviews`.
 - **Backend API docs (OpenAPI/Swagger):** http://localhost:8000/docs
 - **Health check:** http://localhost:8000/api/v1/health
 
@@ -92,6 +94,7 @@ alembic upgrade head
 python -m seed.career_roles        # one-time: career-role catalogue (Phase 6)
 python -m seed.learning_resources  # one-time: learning-resource catalogue (Phase 7)
 python -m seed.job_postings        # one-time: demo job postings (Phase 7)
+python -m seed.interview_questions # one-time: interview question bank (Phase 8)
 uvicorn app.main:app --reload
 ```
 
@@ -106,15 +109,16 @@ npm run dev
 ## Testing
 
 ```bash
-# Backend — 73 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
+# Backend — 89 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
 # the profile module (core fields, skills with case-insensitive dedup, projects with skill
 # tagging, experiences, certifications, cross-user ownership checks), the resume module
 # (PDF/DOCX upload + parsing, contact-info/skill extraction, the heuristic AI analyzer,
 # file-type/size validation, ownership scoping), the career module (skill-gap scoring
-# formula, ranked recommendations, per-role detail, seed-script idempotency), and the
+# formula, ranked recommendations, per-role detail, seed-script idempotency), the
 # learning/job modules (resource browsing + skill filter, the role learning-plan endpoint,
-# job-posting ranking reusing the same skill-gap engine). Runs against a disposable
-# in-memory SQLite DB, no Postgres needed.
+# job-posting ranking reusing the same skill-gap engine), and the interview module (role-aware
+# question selection, one-answer-per-question, auto-completion, the heuristic feedback
+# provider's scoring rules). Runs against a disposable in-memory SQLite DB, no Postgres needed.
 cd backend && pytest -v
 
 # Frontend build + lint
@@ -143,8 +147,8 @@ version-controlled.
 4. ✅ Student profile
 5. ✅ Resume system (upload, parsing, AI analysis)
 6. ✅ Career & skill system (skill-gap analysis, career recommendations)
-7. ✅ Learning resources & job matching — **this phase**
-8. ⬜ Interview preparation & mock interviews
+7. ✅ Learning resources & job matching
+8. ✅ Interview preparation & mock interviews — **this phase**
 9. ⬜ Career dashboard
 10. ⬜ Admin panel
 11. ⬜ Testing & security hardening

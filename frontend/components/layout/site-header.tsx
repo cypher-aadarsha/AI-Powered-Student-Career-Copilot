@@ -26,6 +26,9 @@ export function SiteHeader() {
             <Link href="/learning" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50">
               Learning
             </Link>
+            <Link href="/interviews" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50">
+              Interviews
+            </Link>
             <Link href="/resume" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50">
               Resume
             </Link>

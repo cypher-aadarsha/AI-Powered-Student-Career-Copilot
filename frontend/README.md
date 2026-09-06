@@ -22,10 +22,11 @@ Changing it requires `docker compose build frontend`.
 ```
 app/          Routes (App Router) — login/, register/ (Phase 3), profile/ (Phase 4),
                resume/ (Phase 5), careers/ + careers/[id]/ (Phase 6),
-               jobs/ + jobs/[id]/, learning/ (Phase 7)
+               jobs/ + jobs/[id]/, learning/ (Phase 7), interviews/ + interviews/[id]/ (Phase 8)
 components/
   ui/          Small presentational primitives (button, text-field, textarea-field,
-               select-field, inline-confirm-button, score-bar — shared by resume, careers & jobs)
+               select-field, inline-confirm-button, score-bar — shared by resume, careers,
+               jobs & interviews)
   layout/      Page shells (site-header, auth-shell, section-card)
 features/
   auth/        Zod schemas + AuthProvider context
@@ -38,6 +39,8 @@ features/
                use-careers.ts — the list page's data layer
   job/         api.ts, use-jobs.ts — same shape as career/, the detail page fetches inline
   learning/    api.ts, use-learning-resources.ts (re-fetches on skill filter change)
+  interview/   api.ts, use-interview-sessions.ts — the list page's data layer; the session
+               detail page fetches (and re-fetches after each answer) inline
 hooks/         Shared React hooks — use-require-auth.ts guards a page client-side
 lib/           Cross-cutting utilities — api-client.ts wraps every backend call and attaches
                the auth header; auth-token.ts is the only place that touches localStorage
@@ -101,3 +104,13 @@ nothing. The `careers/[id]` page also calls `careerApi.getLearningPlan(id)` to r
 your skill gap" section listing resources per missing skill — a best-effort fetch that fails
 silently (the section just doesn't render) since it's a bonus alongside the fit score, not
 required for the page to be useful.
+
+## Interview pages (Phase 8)
+
+`/interviews` combines a start form (optional role select, sourced from `useCareers()` — no
+separate "list roles" call needed) with a list of past sessions. `/interviews/[id]` renders every
+assigned question with either an inline answer form or, once answered, the submitted answer plus
+its AI feedback and score. Submitting an answer calls a `refetch()` of the whole session (not a
+local splice of the new answer into state) specifically so `status`, `completed_at`, and
+`average_score` — which the backend may have just changed server-side (auto-completion) — stay
+correct without hand-written client-side logic to mirror that transition.

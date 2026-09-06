@@ -13,6 +13,7 @@ alembic upgrade head                    # creates the schema against DATABASE_UR
 python -m seed.career_roles             # one-time: career-role catalogue (Phase 6)
 python -m seed.learning_resources       # one-time: learning-resource catalogue (Phase 7)
 python -m seed.job_postings             # one-time: demo job postings (Phase 7)
+python -m seed.interview_questions      # one-time: interview question bank (Phase 8)
 uvicorn app.main:app --reload           # http://localhost:8000 — docs at /docs
 pytest -v
 ```
@@ -30,7 +31,7 @@ app/
   models/        SQLAlchemy models: user.py (Phase 3); student_profile.py, skill.py,
                  student_skill.py, project.py, experience.py, certification.py (Phase 4);
                  resume.py (Phase 5); career_role.py (Phase 6); learning_resource.py,
-                 job_posting.py (Phase 7)
+                 job_posting.py (Phase 7); interview_question.py, mock_interview.py (Phase 8)
   schemas/       Pydantic request/response models. skill_match.py's MatchedSkill is shared
                  between career.py and job.py — both run their skills through the same
                  skill_gap engine and return the same "skill + proficiency" shape
@@ -38,19 +39,52 @@ app/
                  skill_gap.py (Phase 6) is a pure, DB-free scoring function, deliberately kept
                  separate from career_service.py/job_service.py (which load the data it scores).
                  learning_service.py (Phase 7) composes CareerService rather than recomputing
-                 gaps itself — "what's missing" is Phase 6's job, "how do I learn it" is Phase 7's
+                 gaps itself — "what's missing" is Phase 6's job, "how do I learn it" is Phase 7's.
+                 interview_service.py (Phase 8) picks a session's fixed question set once at
+                 start time and scores each answer through app/ai/interview_provider.py
   repositories/  Query objects — the only layer that writes SQLAlchemy queries
   ai/            Resume text extraction (parsing.py), structured-data extraction
                  (extraction.py), and the AIProvider interface + implementations
-                 (provider.py) — Phase 5
+                 (provider.py) — Phase 5. interview_provider.py (Phase 8) is the same
+                 heuristic-default/LLM-if-configured pattern applied to interview-answer
+                 feedback instead of resume text — see its docstring for why it's a separate
+                 module rather than reusing AIProvider's method signature
 migrations/      Alembic — 0001 (users), 0002 (profile/skills/projects/experiences/certifications),
-                 0003 (resumes), 0004 (career roles), 0005 (learning resources + job postings)
-seed/            career_roles.py (Phase 6), learning_resources.py + job_postings.py (Phase 7) —
-                 all idempotent by title (job postings: title+company); see below
+                 0003 (resumes), 0004 (career roles), 0005 (learning resources + job postings),
+                 0006 (interview questions + mock interview sessions/answers)
+seed/            career_roles.py (Phase 6), learning_resources.py + job_postings.py (Phase 7),
+                 interview_questions.py (Phase 8) — all idempotent by title (job postings:
+                 title+company); see below
 tests/           pytest — conftest.py's `client` fixture runs against a disposable in-memory
                  SQLite DB (models use dialect-generic types for exactly this reason), so the
                  suite needs no live Postgres
 ```
+
+## Interview module (Phase 8)
+
+- `interview_questions` + `interview_question_skills` are a **platform-curated bank**, same
+  pattern as the other catalogues — seeded via `seed/interview_questions.py`. Behavioral and
+  situational questions are typically untagged (general); technical questions are tagged with
+  the skill they probe.
+- `POST /interviews/sessions` picks a session's question set **once, at start time** — a mix of
+  non-technical (behavioral/situational, at least 1) and technical questions, roughly a third
+  non-technical by default. If `career_role_id` is given, technical questions are filtered to
+  ones tagged with that role's skills first, falling back to the general technical pool only if
+  none match. The assigned set is stored in `mock_interview_session_questions` (a join table,
+  since the same shared question can appear in many sessions) so it stays fixed even if the
+  question bank changes later.
+- `POST /interviews/sessions/{id}/answers` is one-answer-per-question (`409 conflict` on a
+  repeat) and `404`s if the question wasn't actually assigned to that session — same
+  don't-leak-existence philosophy as the rest of the app. Submitting the last unanswered
+  question auto-transitions the session to `completed` and stamps `completed_at`.
+- Feedback (`app/ai/interview_provider.py`) mirrors the resume analyzer's design exactly:
+  `MockInterviewFeedbackProvider` (default) scores answer length, whether it's backed by a
+  concrete number, STAR-method structure (situation/task/action/result keywords), and — when
+  the question has a `model_answer` — keyword overlap with it, as an explainable proxy for
+  "did you cover the key ideas." `LLMInterviewFeedbackProvider` calls the same configured LLM
+  endpoint as the resume/career modules and falls back to the heuristic on any failure.
+- `average_score` is computed from `answers` at response time in `api/v1/interviews.py`, never
+  stored — same reasoning as the career module's on-the-fly scoring.
 
 ## Learning & job modules (Phase 7)
 
