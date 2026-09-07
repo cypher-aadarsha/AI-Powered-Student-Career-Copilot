@@ -9,6 +9,7 @@ directory and never leak files between test runs.
 """
 import io
 import time
+import uuid
 
 import pytest
 from docx import Document
@@ -18,6 +19,7 @@ from reportlab.pdfgen import canvas
 from app.ai.extraction import detect_skills, extract_contact_info
 from app.ai.provider import MockAIProvider
 from app.core.config import get_settings
+from app.models.resume import Resume
 
 STUDENT_A = {"email": "asha@example.edu.np", "password": "password123", "full_name": "Asha Sharma"}
 STUDENT_B = {"email": "bikash@example.edu.np", "password": "password123", "full_name": "Bikash Sainju"}
@@ -154,10 +156,13 @@ def test_upload_rejects_oversized_file(client, monkeypatch):
 
 def test_upload_of_corrupt_pdf_marks_resume_failed_instead_of_500(client):
     headers = _auth_headers(client)
+    # Real PDF header, garbage body — passes the file-signature check at
+    # upload time but still isn't a parseable PDF, so this exercises the
+    # parser's own failure handling rather than upload validation.
     response = client.post(
         "/api/v1/resumes",
         headers=headers,
-        files={"file": ("resume.pdf", b"this is not a real pdf", "application/pdf")},
+        files={"file": ("resume.pdf", b"%PDF-1.4\nthis is not a valid pdf body", "application/pdf")},
     )
     assert response.status_code == 201
     body = response.json()["data"]
@@ -165,11 +170,44 @@ def test_upload_of_corrupt_pdf_marks_resume_failed_instead_of_500(client):
     assert body["parse_error"]
 
 
+def test_upload_rejects_a_file_whose_content_does_not_match_its_declared_type(client):
+    # Content-Type is a client-supplied header — an attacker can label any
+    # bytes "application/pdf". The file's actual signature (magic bytes) is
+    # checked too, so a mismatched upload is rejected before it reaches the
+    # parser, not silently trusted.
+    headers = _auth_headers(client)
+    response = client.post(
+        "/api/v1/resumes",
+        headers=headers,
+        files={"file": ("resume.pdf", b"hello world, not actually a pdf", "application/pdf")},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "unsupported_file_type"
+
+
 def test_upload_without_auth_returns_401(client):
     response = client.post(
         "/api/v1/resumes", files={"file": ("resume.pdf", _pdf_bytes(RESUME_LINES), "application/pdf")}
     )
     assert response.status_code == 401
+
+
+def test_upload_with_a_path_traversal_filename_is_stored_safely(client, db_session):
+    # The client-supplied filename is never used to build the on-disk path
+    # beyond its extension — the file itself is always written under a
+    # server-generated uuid — so a malicious filename can't escape the
+    # per-profile storage directory.
+    headers = _auth_headers(client)
+    response = client.post(
+        "/api/v1/resumes",
+        headers=headers,
+        files={"file": ("../../../etc/passwd.pdf", _pdf_bytes(["hi"]), "application/pdf")},
+    )
+    assert response.status_code == 201
+    resume_id = uuid.UUID(response.json()["data"]["id"])
+    resume = db_session.get(Resume, resume_id)
+    assert ".." not in resume.storage_path
+    assert resume.storage_path.endswith(".pdf")
 
 
 # --- list / get / delete / reanalyze, ownership scoping -------------------
@@ -221,7 +259,9 @@ def test_reanalyze_recomputes_ai_fields(client):
 def test_reanalyze_unparsed_resume_returns_409(client):
     headers = _auth_headers(client)
     upload = client.post(
-        "/api/v1/resumes", headers=headers, files={"file": ("resume.pdf", b"not a real pdf", "application/pdf")}
+        "/api/v1/resumes",
+        headers=headers,
+        files={"file": ("resume.pdf", b"%PDF-1.4\nnot a real pdf body", "application/pdf")},
     )
     resume_id = upload.json()["data"]["id"]
     response = client.post(f"/api/v1/resumes/{resume_id}/reanalyze", headers=headers)

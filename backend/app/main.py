@@ -10,6 +10,7 @@ from app.api.v1 import admin, auth, careers, dashboard, health, interviews, jobs
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.security_headers import SecurityHeadersMiddleware
 
 settings = get_settings()
 configure_logging("DEBUG" if settings.debug else "INFO")
@@ -27,6 +28,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SecurityHeadersMiddleware, enable_hsts=settings.environment == "production")
 
 register_exception_handlers(app)
 

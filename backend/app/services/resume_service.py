@@ -29,6 +29,18 @@ ALLOWED_MIME_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 
+# The browser-supplied Content-Type is just a client-provided header — an
+# attacker can label any bytes "application/pdf". Checking the file's actual
+# signature (magic bytes) catches a mismatched/spoofed upload before it ever
+# reaches the parser. DOCX is a ZIP container, so its signature is the
+# generic ZIP local-file-header magic, not anything Word-specific.
+_FILE_SIGNATURES: dict[str, bytes] = {
+    "application/pdf": b"%PDF",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": b"PK\x03\x04",
+}
+
+_READ_CHUNK_BYTES = 1024 * 1024
+
 
 class UnsupportedFileTypeError(AppError):
     def __init__(self):
@@ -66,10 +78,11 @@ class ResumeService:
         if mime_type not in ALLOWED_MIME_TYPES:
             raise UnsupportedFileTypeError()
 
-        file_bytes = upload.file.read()
         max_bytes = self.settings.resume_max_size_mb * 1024 * 1024
-        if len(file_bytes) > max_bytes:
-            raise FileTooLargeError(self.settings.resume_max_size_mb)
+        file_bytes = self._read_bounded(upload, max_bytes)
+
+        if not file_bytes.startswith(_FILE_SIGNATURES[mime_type]):
+            raise UnsupportedFileTypeError()
 
         storage_path = self._save_file(profile.id, upload.filename or "resume", file_bytes)
         resume = self.resumes.create(
@@ -105,6 +118,22 @@ class ResumeService:
         if profile is None:
             profile = self.profiles.create(user_id=user_id)
         return profile
+
+    def _read_bounded(self, upload: UploadFile, max_bytes: int) -> bytes:
+        """Reads in chunks and aborts as soon as the size cap is crossed,
+        instead of buffering an attacker-supplied file of unbounded size into
+        memory before checking its length."""
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = upload.file.read(_READ_CHUNK_BYTES)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise FileTooLargeError(self.settings.resume_max_size_mb)
+            chunks.append(chunk)
+        return b"".join(chunks)
 
     def _save_file(self, profile_id: uuid.UUID, original_filename: str, file_bytes: bytes) -> str:
         extension = Path(original_filename).suffix

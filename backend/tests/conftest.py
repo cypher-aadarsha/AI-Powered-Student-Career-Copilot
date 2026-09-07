@@ -10,9 +10,21 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401 — registers models on Base.metadata
+from app.core.rate_limit import reset_all as reset_rate_limits
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app as fastapi_app
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    # The rate limiter's counters are module-level, in-memory state shared
+    # across the whole pytest process — without resetting them, the many
+    # auth requests other test files make would eventually trip the auth
+    # rate limit and fail unrelated tests. See test_security_hardening.py
+    # for the tests that actually exercise the limiter's own behavior.
+    reset_rate_limits()
+    yield
 
 
 @pytest.fixture()

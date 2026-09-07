@@ -2,4 +2,3 @@
 
 ruff==0.8.4
 mypy==1.13.0
-reportlab==4.2.5  # test-only: generates sample PDFs for the resume upload/parsing tests

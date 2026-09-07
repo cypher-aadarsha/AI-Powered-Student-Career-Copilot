@@ -11,6 +11,8 @@ cp .env.example .env.local
 npm run dev      # http://localhost:3000
 npm run build    # production build + type check
 npm run lint
+npm run test      # unit tests (Vitest + React Testing Library, Phase 11), single run
+npm run test:watch  # same, in watch mode
 ```
 
 **Docker note:** `NEXT_PUBLIC_API_URL` is inlined into the client bundle at build time, so under
@@ -25,6 +27,8 @@ app/          Routes (App Router) — page.tsx is the dashboard (Phase 9, protec
                careers/ + careers/[id]/ (Phase 6), jobs/ + jobs/[id]/, learning/ (Phase 7),
                interviews/ + interviews/[id]/ (Phase 8), admin/ + four admin/<catalogue>/
                sub-pages + admin/users/ (Phase 10, protected by role — see below)
+*.test.ts(x)  Unit tests (Vitest + React Testing Library, Phase 11), colocated next to the
+               file they cover rather than in a separate __tests__/ tree — see vitest.config.mts
 components/
   ui/          Small presentational primitives (button, text-field, textarea-field,
                select-field, inline-confirm-button, score-bar — shared by resume, careers,
@@ -162,3 +166,24 @@ name that doesn't exist yet in the catalogue is exactly how an admin introduces 
 `/admin/users` lists every account with an Activate/Deactivate toggle; the toggle for the
 signed-in admin's own row is disabled client-side (title-tooltip explains why) mirroring the
 backend's `400 cannot_deactivate_self` — a UX nicety, not the enforcement.
+
+## Unit testing (Phase 11)
+
+Next.js 16 documents Vitest, not Jest, as its unit-testing setup (`node_modules/next/dist/docs/
+01-app/02-guides/testing/vitest.md`) — `vitest.config.mts` uses Vite's native
+`resolve.tsconfigPaths` to resolve the `@/*` alias rather than an extra plugin. Tests are
+colocated next to the file they cover (`schemas.test.ts` beside `schemas.ts`, etc.) instead of a
+parallel `__tests__/` tree. Coverage so far is deliberately narrow — the pieces with real
+branching logic that don't need a browser to verify:
+
+- **Zod schemas** (`features/auth/schemas.test.ts`, `features/profile/schemas.test.ts`): the
+  edge cases each schema's `.refine()`/coercion exists for — a semester string coercing to a
+  number, an end-date-before-start-date rejection, a malformed URL, a too-short password.
+- **Presentational components with real behavior**: `InlineConfirmButton`'s two-step arm/confirm/
+  cancel flow, `ScoreBar`'s color-threshold branching, and `SkillRefInput`'s add/dedupe/remove
+  chip logic (the one component shared by all four admin catalogue forms).
+
+This is unit coverage, not a replacement for the per-phase browser walkthrough — every full page
+flow (a real login, a real resume upload, a real admin edit) is still verified by hand in Chrome
+each phase, as every "Phases 5-10" section above already documents. `npm run build`'s TypeScript
+pass and `npm run lint` catch the rest of what a compiler/linter can catch statically.

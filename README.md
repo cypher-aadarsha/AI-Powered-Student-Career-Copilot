@@ -8,11 +8,13 @@ BSc. CSIT 6th Semester Software Engineering project — built as a production-qu
 monolith rather than a toy CRUD demo. The full architecture, database design, algorithms, and
 phased delivery plan are documented in the **Technical Design Document** (Phase 1 deliverable).
 
-**Status:** Phase 10 — Admin Panel. The four platform-curated catalogues every earlier phase
-deliberately left read-only (career roles, learning resources, job postings, interview questions)
-now have full admin CRUD at `/admin`, plus user moderation (deactivate/reactivate an account).
-Admin accounts are provisioned out-of-band via a seed script, never through self-registration.
-Every other feature module lands in the phases that follow.
+**Status:** Phase 11 — Testing & Security Hardening. Auth endpoints are now rate-limited against
+brute-force/credential-stuffing, every response carries defensive HTTP headers, resume uploads are
+validated by actual file signature (not just the client-supplied Content-Type) and read with a
+bounded stream instead of trusting an unbounded size, and the test suite grew adversarial coverage
+(tampered/expired/forged JWTs, path-traversal filenames, injection-style input). The frontend
+gained its first unit tests (Vitest + React Testing Library). Every other feature module lands in
+the phases that follow.
 
 ## Stack
 
@@ -23,7 +25,7 @@ Every other feature module lands in the phases that follow.
 | Database | PostgreSQL 16, Alembic migrations |
 | AI/NLP | pdfplumber, python-docx (Phase 5); skill-gap matching (Phase 6/7) is a deterministic weighted formula, not embeddings — see backend/README |
 | Auth | JWT (python-jose) + bcrypt (passlib) |
-| DevOps | Docker, Docker Compose, pytest, Jest |
+| DevOps | Docker, Docker Compose, pytest, Vitest + React Testing Library (Phase 11) |
 
 ## Project structure
 
@@ -116,25 +118,31 @@ npm run dev
 ## Testing
 
 ```bash
-# Backend — 114 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
+# Backend — 125 tests: health, auth (hashing, registration, login, JWT-gated routes, RBAC),
 # the profile module (core fields, skills with case-insensitive dedup, projects with skill
 # tagging, experiences, certifications, cross-user ownership checks), the resume module
 # (PDF/DOCX upload + parsing, contact-info/skill extraction, the heuristic AI analyzer,
-# file-type/size validation, ownership scoping), the career module (skill-gap scoring
-# formula, ranked recommendations, per-role detail, seed-script idempotency), the
-# learning/job modules (resource browsing + skill filter, the role learning-plan endpoint,
-# job-posting ranking reusing the same skill-gap engine), the interview module (role-aware
-# question selection, one-answer-per-question, auto-completion, the heuristic feedback
-# provider's scoring rules), the dashboard module (profile-completion scoring, latest
-# resume, top matches, interview stats, the suggested-actions rules), and the admin module
-# (role-guard enforcement, CRUD over all four catalogues, user moderation including the
-# can't-deactivate-yourself guard, and the delete-blocked-when-in-use conflict path — which
-# is also why the test DB now runs with SQLite's FOREIGN KEY enforcement turned on, see
-# tests/conftest.py). Runs against a disposable in-memory SQLite DB, no Postgres needed.
+# file-type/size/signature validation, path-traversal-safe storage, ownership scoping), the
+# career module (skill-gap scoring formula, ranked recommendations, per-role detail,
+# seed-script idempotency), the learning/job modules (resource browsing + skill filter, the
+# role learning-plan endpoint, job-posting ranking reusing the same skill-gap engine), the
+# interview module (role-aware question selection, one-answer-per-question, auto-completion,
+# the heuristic feedback provider's scoring rules), the dashboard module (profile-completion
+# scoring, latest resume, top matches, interview stats, the suggested-actions rules), the
+# admin module (role-guard enforcement, CRUD over all four catalogues, user moderation
+# including the can't-deactivate-yourself guard, and the delete-blocked-when-in-use conflict
+# path — which is also why the test DB now runs with SQLite's FOREIGN KEY enforcement turned
+# on, see tests/conftest.py), and Phase 11's security hardening (defensive response headers,
+# auth rate limiting, tampered/expired/forged JWTs, path-traversal filenames, injection-style
+# input). Runs against a disposable in-memory SQLite DB, no Postgres needed.
 cd backend && pytest -v
 
-# Frontend build + lint
-cd frontend && npm run build && npm run lint
+# Frontend — build + lint + unit tests (Vitest + React Testing Library, Phase 11): Zod schema
+# edge cases (auth, profile) and presentational components (InlineConfirmButton's two-step
+# flow, ScoreBar's color thresholds, the admin SkillRefInput chip list). Full page flows are
+# still verified by hand in a real browser each phase — see each README's design-decision
+# sections for what was checked that way.
+cd frontend && npm run build && npm run lint && npm run test
 ```
 
 ## Environment variables
@@ -142,6 +150,34 @@ cd frontend && npm run build && npm run lint
 See `backend/.env.example` and `frontend/.env.example` — every variable the app reads is
 documented there. Never commit `.env` / `.env.local`; only the `.env.example` templates are
 version-controlled.
+
+## Security (Phase 11)
+
+- **Auth rate limiting**: `/auth/login` and `/auth/register` are capped per client IP (20
+  requests/60s) to blunt brute-force and credential-stuffing loops. In-memory, single-process —
+  see `backend/app/core/rate_limit.py`'s docstring for what a Redis-backed limiter would add
+  under multiple workers.
+- **Defensive HTTP headers** on every response (`X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy`, `Permissions-Policy`; `Strict-Transport-Security` only when
+  `ENVIRONMENT=production`) — see `backend/app/core/security_headers.py`.
+- **Resume upload hardening**: the file's actual signature (magic bytes) is checked, not just the
+  client-supplied `Content-Type` header, and the upload is read in bounded chunks rather than
+  buffering an attacker-supplied size into memory before checking it.
+- **Dependency audit**: `pip-audit` initially flagged 24 known vulnerabilities across 6 backend
+  packages; `npm audit` reported 0 for the frontend. Every fixable backend finding was bumped
+  (`fastapi`, `starlette`, `python-jose`, `python-multipart`, `pdfplumber`→`pdfminer.six` — see
+  `backend/requirements.txt`'s inline comments for exactly which CVEs each bump addresses),
+  bringing it down to 3 remaining findings, none of them reachable in this app: `ecdsa` and
+  `pyasn1` (both pulled in transitively by `python-jose` for RSA/EC key handling, with no fix
+  version available that respects `python-jose`'s own pin) are only ever exercised by JWT
+  algorithms this app never uses — every token here is signed with HS256 — and `pytest`'s advisory
+  is a dev-only, test-time exposure with no path into the deployed app.
+- **No SQL injection surface**: every query goes through SQLAlchemy's ORM/query builder — nothing
+  in this codebase interpolates a string into raw SQL.
+- **Accepted trade-offs, unchanged from earlier phases**: JWTs are stateless with no server-side
+  revocation list (`POST /auth/logout` is a client-side-only no-op — see `backend/README`'s Auth
+  section); the rate limiter's state doesn't survive a restart or share across multiple worker
+  processes. Both are documented, deliberate scope limits at this project's scale, not oversights.
 
 ## Documentation
 
@@ -162,6 +198,6 @@ version-controlled.
 7. ✅ Learning resources & job matching
 8. ✅ Interview preparation & mock interviews
 9. ✅ Career dashboard
-10. ✅ Admin panel — **this phase**
-11. ⬜ Testing & security hardening
+10. ✅ Admin panel
+11. ✅ Testing & security hardening — **this phase**
 12. ⬜ Deployment

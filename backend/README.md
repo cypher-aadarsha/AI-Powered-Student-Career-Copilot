@@ -26,7 +26,8 @@ read the generated file before running it — autogenerate is a starting point, 
 
 ```
 app/
-  core/          Settings, logging, security (hashing/JWT), exception → HTTP mapping
+  core/          Settings, logging, security (hashing/JWT), exception → HTTP mapping,
+                 rate_limit.py + security_headers.py (Phase 11)
   api/           deps.py (auth/RBAC guards) + v1/ routers — thin, delegate to services/
   db/            Engine/session + declarative base
   models/        SQLAlchemy models: user.py (Phase 3); student_profile.py, skill.py,
@@ -80,6 +81,64 @@ tests/           pytest — conftest.py's `client` fixture runs against a dispos
                  FOREIGN KEY enforcement turned on (off by default, unlike Postgres) — see
                  conftest.py's `_enable_sqlite_foreign_keys` and the admin module notes below
 ```
+
+## Testing & security hardening (Phase 11)
+
+- **Rate limiting** (`app/core/rate_limit.py`): a small in-process sliding-window limiter, applied
+  via `Depends(rate_limit(...))` to `/auth/login` and `/auth/register` (20 requests/60s per client
+  IP). It's plain module-level state — no Redis, no new dependency — consistent with the rest of
+  this stack's single-process designs (no job queue, no token blacklist). That's also its one real
+  limitation: the counters don't survive a restart and aren't shared across multiple worker
+  processes. `tests/conftest.py`'s `_reset_rate_limits` autouse fixture clears that state before
+  every test — without it, the hundreds of `/auth/*` calls the rest of the suite already makes
+  would eventually trip the limiter and fail unrelated tests.
+- **Defensive response headers** (`app/core/security_headers.py`): `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` on every response;
+  `Strict-Transport-Security` only when `ENVIRONMENT=production` (sending it over a plain-HTTP
+  local dev server would be actively misleading).
+- **Resume upload hardening** (`app/services/resume_service.py`): two gaps in the Phase 5 upload
+  path get closed without changing its shape. First, the browser-supplied `Content-Type` is a
+  client-controlled header — an attacker can label any bytes `application/pdf` — so the file's
+  first bytes are now checked against the real PDF/DOCX(ZIP) signature before it's trusted.
+  Second, the upload used to call `.read()` once with no bound, buffering an attacker-supplied
+  file of arbitrary size into memory before the size check ever ran; it now reads in 1MB chunks
+  and aborts the moment the total crosses `RESUME_MAX_SIZE_MB`. Neither changes what a legitimate
+  PDF/DOCX upload looks like — `test_resumes.py`'s existing "corrupt PDF still gets a graceful
+  `failed` status" test was adjusted to use a real `%PDF` header with a garbage body, since a
+  signature-mismatched file is now rejected at upload time (`422 unsupported_file_type`) rather
+  than reaching the parser at all.
+- **Adversarial test coverage** (`tests/test_security_hardening.py` + new cases in
+  `test_resumes.py`): every response carries the headers above; the login/register rate limits
+  actually trip after repeated requests (and stay tripped for a *correct* password too — the
+  limiter counts requests, not failures, so it can't be used to distinguish a real password from
+  a wrong one); an expired JWT, one signed with the wrong secret, and one with a tampered payload
+  are all rejected with `401`, not a 500; a path-traversal filename (`../../../etc/passwd.pdf`)
+  is still written under the server-generated uuid path it always was (the client filename was
+  never used for more than its extension — see the Resume model section below); and HTML/script
+  and SQL-injection-style strings in profile/skill fields round-trip as inert literal text — this
+  app has no raw-SQL string interpolation anywhere (every query goes through the ORM) and no
+  server-side HTML templating to inject into.
+- **Dependency audit**: `pip-audit` initially flagged 24 known vulnerabilities across 6 packages;
+  `requirements.txt`'s inline comments on `fastapi`, `starlette`, `python-jose`,
+  `python-multipart`, and `pdfplumber` record exactly which CVEs each version bump closes, bringing
+  it down to 3. `pdfplumber`'s bump matters more than a routine dependency update would — it's the
+  library that parses **untrusted user-uploaded PDFs**, so a parser vulnerability there is the one
+  with a real attacker-reachable path. The `fastapi`/`starlette` bump needed the biggest jump
+  (0.115.6→0.135.0 / 0.41.3→1.3.1, since FastAPI 0.115.6's own pin (`starlette<0.42.0`) couldn't
+  reach any patched starlette release) — the full 125-test suite was re-run against it before
+  committing to the jump, specifically to catch anything that FastAPI's own changelog might have
+  missed. The 2 remaining findings (`ecdsa`, `pyasn1`, both transitive via `python-jose`, and both
+  capped below their fix version by `python-jose`'s own declared pin) are inapplicable regardless:
+  this app only ever signs JWTs with HS256, never the RSA/EC algorithms those two libraries
+  support. `pytest` also has an unfixed advisory; it's a dev-only, test-time dependency with no
+  production attack surface, so it's left as a documented, accepted, low-priority exposure rather
+  than risking a major-version bump (8.x→9.x) of the whole test harness for a finding that can't
+  be reached outside a dev machine anyway. `npm audit` on the frontend reports zero findings.
+- **Frontend unit tests**: see `frontend/README.md`'s own Phase 11 section — Vitest + React
+  Testing Library, covering Zod schema edge cases and the presentational components with real
+  branching logic (`InlineConfirmButton`, `ScoreBar`, `SkillRefInput`).
+- **No new tables, no new migration** — this phase hardens existing surfaces rather than adding
+  a feature module.
 
 ## Admin panel (Phase 10)
 
